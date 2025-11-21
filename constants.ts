@@ -1,14 +1,19 @@
 
-import { CharacterClass, PlayerStats, AdventureLocation } from './types';
+import { CharacterClass, PlayerStats, AdventureLocation, GameSettings } from './types';
 
-export const INITIAL_HEALTH = 10;
-export const HAND_SIZE = 5;
-
-// Alignment Constants
-export const MAX_ALIGNMENT = 10;
-export const MIN_ALIGNMENT = -10;
-export const EVIL_THRESHOLD = -5;
-export const GOOD_THRESHOLD = 5;
+export const DEFAULT_SETTINGS: GameSettings = {
+  initialHealth: 10,
+  handSize: 5,
+  maxRounds: 3,
+  turnsPerRound: 5,
+  evilThreshold: -5,
+  goodThreshold: 5,
+  xpBaseCost: 1, // Cost = current val + base
+  xpLevelUpMult: 5, // Cost = level * mult
+  manaCostPerExtraCard: 1,
+  alignmentMin: -10,
+  alignmentMax: 10
+};
 
 export const CLASS_DEFAULTS: Record<CharacterClass, { stats: PlayerStats; description: string; image: string }> = {
   Druid: {
@@ -47,49 +52,89 @@ export const ADVENTURE_LOCATIONS: AdventureLocation[] = [
   { 
     id: 'forest', 
     name: 'Whispering Forest', 
-    description: 'A dense thicket teeming with life.', 
-    lootDescription: 'Success: Gain Location Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP.',
-    nodes: 5, 
-    progress: 0, 
+    description: 'A dense thicket teeming with life and branching paths.', 
+    lootDescription: 'Success: Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP & Double Move.',
+    encounters: [
+        { id: 'f1', name: 'Edge of Woods', modifier: null },
+        { 
+            id: 'f2', 
+            name: 'Fork in the River', 
+            modifier: { type: 'difficulty', value: 2, name: 'Running Water', description: 'Slippery rocks. +2 Diff.', icon: 'shield-alert' },
+            branch: {
+                type: 'suit_color',
+                text: 'Red: Sunlit Glade (Safe) | Black: Murky Cave (Hard)',
+                paths: {
+                    red: [
+                        { id: 'f3a', name: 'Sunlit Glade', modifier: null },
+                        { id: 'f4a', name: 'Fairy Ring', modifier: { type: 'difficulty', value: 1, name: 'Distraction', description: '+1 Difficulty', icon: 'shield-alert' } }
+                    ],
+                    black: [
+                        { id: 'f3b', name: 'Murky Cave', modifier: { type: 'difficulty', value: 4, name: 'Darkness', description: '+4 Difficulty', icon: 'eye-off' } },
+                        { id: 'f4b', name: 'Bear Den', modifier: { type: 'difficulty', value: 5, name: 'Angry Bear', description: '+5 Difficulty', icon: 'shield-alert' } }
+                    ]
+                }
+            }
+        },
+        { id: 'f3', name: 'Deep Thicket', modifier: { type: 'max_cards', value: 2, name: 'Dense Vines', description: 'Max 2 Cards', icon: 'minimize' } },
+        { id: 'f4', name: 'Elder Tree', modifier: { type: 'difficulty', value: 4, name: 'Ancient Ward', description: '+4 Difficulty', icon: 'shield-alert' } }
+    ],
+    currentEncounterIndex: 0, 
     rewards: ['XP', 'Green Mana'],
     preferredSuit: 'clubs',
     statAttribute: 'spirit',
-    nodeModifiers: []
+    icon: 'tree'
   },
   { 
     id: 'dungeon', 
     name: 'Deep Dungeon', 
     description: 'Dark corridors filled with ancient treasure.', 
-    lootDescription: 'Success: Gain Location Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP.',
-    nodes: 8, 
-    progress: 0, 
+    lootDescription: 'Success: Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP & Double Move.',
+    encounters: [
+        { id: 'd1', name: 'Rusty Gate', modifier: null },
+        { id: 'd2', name: 'Guard Room', modifier: { type: 'difficulty', value: 2, name: 'Orc Guard', description: '+2 Difficulty', icon: 'shield-alert' } },
+        { id: 'd3', name: 'Trap Hall', modifier: { type: 'suit_penalty', value: 0, targetSuit: 'clubs', name: 'Spike Pit', description: 'Clubs have 0 value', icon: 'eye-off' } },
+        { id: 'd4', name: 'Torture Chamber', modifier: { type: 'difficulty', value: 3, name: 'Bad Vibes', description: '+3 Difficulty', icon: 'shield-alert' } },
+        { id: 'd5', name: 'Dragon Hoard', modifier: { type: 'difficulty', value: 6, name: 'Dragon', description: '+6 Difficulty', icon: 'shield-alert' } }
+    ],
+    currentEncounterIndex: 0, 
     rewards: ['Gold', 'Items'],
     preferredSuit: 'spades',
     statAttribute: 'might',
-    nodeModifiers: []
+    icon: 'castle'
   },
   { 
     id: 'tower', 
     name: 'Mage Tower', 
     description: 'Arcane libraries and magical anomalies.', 
-    lootDescription: 'Success: Gain Location Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP.',
-    nodes: 4, 
-    progress: 0, 
+    lootDescription: 'Success: Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP & Double Move.',
+    encounters: [
+        { id: 't1', name: 'Lobby', modifier: null },
+        { id: 't2', name: 'Spiral Stairs', modifier: { type: 'max_cards', value: 3, name: 'Narrow Steps', description: 'Max 3 Cards', icon: 'minimize' } },
+        { id: 't3', name: 'Library', modifier: { type: 'difficulty', value: 3, name: 'Silence', description: '+3 Difficulty', icon: 'shield-alert' } },
+        { id: 't4', name: 'Observatory', modifier: null },
+        { id: 't5', name: 'Archmage Study', modifier: { type: 'suit_penalty', value: 0, targetSuit: 'spades', name: 'Wards', description: 'Spades have 0 value', icon: 'eye-off' } }
+    ], 
+    currentEncounterIndex: 0, 
     rewards: ['Mana', 'Spells'],
     preferredSuit: 'diamonds',
     statAttribute: 'wisdom',
-    nodeModifiers: []
+    icon: 'mountain'
   },
   { 
     id: 'city', 
     name: 'Capital City', 
     description: 'Bustling streets of commerce and intrigue.', 
-    lootDescription: 'Success: Gain Location Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP.',
-    nodes: 3, 
-    progress: 0, 
+    lootDescription: 'Success: Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP & Double Move.',
+    encounters: [
+        { id: 'c1', name: 'City Gates', modifier: null },
+        { id: 'c2', name: 'Marketplace', modifier: null },
+        { id: 'c3', name: 'Back Alley', modifier: { type: 'difficulty', value: 2, name: 'Thieves', description: '+2 Difficulty', icon: 'shield-alert' } },
+        { id: 'c4', name: 'Royal Court', modifier: { type: 'difficulty', value: 4, name: 'Politics', description: '+4 Difficulty', icon: 'shield-alert' } }
+    ], 
+    currentEncounterIndex: 0, 
     rewards: ['Gold', 'Reputation'],
     preferredSuit: 'hearts',
     statAttribute: 'agility',
-    nodeModifiers: []
+    icon: 'city'
   },
 ];

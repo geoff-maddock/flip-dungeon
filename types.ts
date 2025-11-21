@@ -12,6 +12,20 @@ export interface Card {
 export type CharacterClass = 'Druid' | 'Ranger' | 'Paladin' | 'Alchemist' | 'Necromancer' | 'Bard';
 export type Difficulty = 'Easy' | 'Normal' | 'Hard';
 
+export interface GameSettings {
+  initialHealth: number;
+  handSize: number;
+  maxRounds: number;
+  turnsPerRound: number;
+  evilThreshold: number;
+  goodThreshold: number;
+  xpBaseCost: number; // Multiplier for leveling stats
+  xpLevelUpMult: number; // Multiplier for player level
+  manaCostPerExtraCard: number;
+  alignmentMin: number;
+  alignmentMax: number;
+}
+
 export interface PlayerStats {
   level: number;
   might: number;
@@ -32,7 +46,7 @@ export interface Scoring {
   explore: number;
   champion: number;
   fortune: number;
-  spirit: number;
+  soul: number;
 }
 
 export interface PlayerState {
@@ -43,7 +57,7 @@ export interface PlayerState {
   items: string[];
   artifacts: string[];
   activeBuffs: Partial<Record<keyof PlayerStats, number>>;
-  alignment: number; // Range -10 (Evil) to 10 (Good)
+  alignment: number; // Range determined by settings
 }
 
 export type GamePhase = 'setup' | 'playing' | 'resolving' | 'round_end' | 'game_over';
@@ -62,17 +76,36 @@ export interface NodeModifier {
   icon: string; // Identifier for UI rendering
 }
 
+// --- Adventure & Branching ---
+
+export interface Branch {
+  type: 'suit_color'; // Can be extended to 'rank_parity' etc.
+  text: string; // Description of choice "Red for High Road, Black for Low Road"
+  paths: {
+    red: Encounter[];   // Hearts/Diamonds
+    black: Encounter[]; // Spades/Clubs
+  };
+}
+
+export interface Encounter {
+  id: string;
+  name: string;
+  description?: string;
+  modifier: NodeModifier | null;
+  branch?: Branch; // If present, this encounter offers a branching path on completion
+}
+
 export interface AdventureLocation {
   id: string;
   name: string;
   description: string;
-  lootDescription: string; // New field for specific reward info
-  nodes: number;
-  progress: number;
+  lootDescription: string;
+  encounters: Encounter[]; // The sequence of steps
+  currentEncounterIndex: number;
   rewards: string[];
-  preferredSuit: Suit; // Suit that grants a bonus
-  statAttribute: StatAttribute; // Stat used to calculate success here
-  nodeModifiers: (NodeModifier | null)[]; // Array corresponding to nodes. null = no modifier
+  preferredSuit: Suit;
+  statAttribute: StatAttribute;
+  icon?: string;
 }
 
 export interface TurnRecord {
@@ -112,7 +145,7 @@ export interface HighScore {
       explore: number;
       champion: number;
       fortune: number;
-      spirit: number;
+      soul: number;
   };
   history: TurnRecord[];
 }

@@ -74,7 +74,7 @@ const Scoreboard: React.FC<ScoreboardProps> = ({ scores, onClose }) => {
                                 <span className="text-red-900/80" title="Champion">{score.stats.champion}C</span>
                                 <span className="text-green-900/80" title="Explore">{score.stats.explore}E</span>
                                 <span className="text-yellow-900/80" title="Fortune">{score.stats.fortune}F</span>
-                                <span className="text-blue-900/80" title="Spirit">{score.stats.spirit}S</span>
+                                <span className="text-blue-900/80" title="Soul">{score.stats.soul}S</span>
                             </div>
                         </div>
                         <div className="text-zinc-500">

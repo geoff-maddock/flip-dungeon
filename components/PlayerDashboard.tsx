@@ -1,9 +1,8 @@
 
 import React, { useState } from 'react';
-import { PlayerState, Card, StatAttribute } from '../types';
-import { Heart, Coins, Star, Sparkles, User, Shield, Zap, Scroll, Brain, Trophy, Map as MapIcon, Crosshair, Gem, ArrowUpCircle, ShoppingBag, RefreshCw, Skull, Sun } from 'lucide-react';
+import { PlayerState, Card, StatAttribute, GameSettings } from '../types';
+import { Heart, Coins, Star, Sparkles, User, Shield, Zap, Scroll, Brain, Trophy, Map as MapIcon, Crosshair, Gem, ArrowUpCircle, ShoppingBag, RefreshCw, Skull, Sun, Trash2 } from 'lucide-react';
 import { getSuitSymbol } from '../utils/deck';
-import { EVIL_THRESHOLD, GOOD_THRESHOLD, MIN_ALIGNMENT, MAX_ALIGNMENT } from '../constants';
 import { playSFX } from '../utils/sound';
 
 interface PlayerDashboardProps {
@@ -13,6 +12,8 @@ interface PlayerDashboardProps {
   onLevelUp: (stat: StatAttribute | 'PLAYER_LEVEL') => void;
   onBuyItem: (item: string, cost: number, statBuff?: StatAttribute, amount?: number) => void;
   onMulligan: () => void;
+  onDiscardHand: () => void;
+  settings: GameSettings;
 }
 
 const StatRow = ({ 
@@ -22,7 +23,8 @@ const StatRow = ({
   statKey, 
   xp, 
   onLevelUp,
-  buff 
+  buff,
+  baseCost
 }: { 
   label: string; 
   value: number; 
@@ -31,8 +33,9 @@ const StatRow = ({
   xp: number;
   onLevelUp: (s: StatAttribute) => void;
   buff?: number;
+  baseCost: number;
 }) => {
-  const cost = value + 1;
+  const cost = value + baseCost;
   const canUpgrade = xp >= cost && statKey !== 'level';
 
   return (
@@ -134,19 +137,20 @@ const ActionButton = ({
   </button>
 );
 
-const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards, onSelfAction, onLevelUp, onBuyItem, onMulligan }) => {
+const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards, onSelfAction, onLevelUp, onBuyItem, onMulligan, onDiscardHand, settings }) => {
   const [showShop, setShowShop] = useState(false);
-  const manaCost = Math.max(0, selectedCards.length - 1);
+  const manaCost = Math.max(0, (selectedCards.length - 1) * settings.manaCostPerExtraCard);
   const canAfford = player.resources.mana >= manaCost;
 
   // Level Up Calculation
-  const levelUpCost = player.stats.level * 5;
+  const levelUpCost = player.stats.level * settings.xpLevelUpMult;
   const canLevelUp = player.resources.xp >= levelUpCost;
 
   // Alignment Colors
-  const alignmentPercent = ((player.alignment - MIN_ALIGNMENT) / (MAX_ALIGNMENT - MIN_ALIGNMENT)) * 100;
-  const isEvil = player.alignment <= EVIL_THRESHOLD;
-  const isGood = player.alignment >= GOOD_THRESHOLD;
+  const range = settings.alignmentMax - settings.alignmentMin;
+  const alignmentPercent = ((player.alignment - settings.alignmentMin) / range) * 100;
+  const isEvil = player.alignment <= settings.evilThreshold;
+  const isGood = player.alignment >= settings.goodThreshold;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-zinc-950/80 backdrop-blur-md p-4 md:p-6 rounded-xl shadow-2xl border border-zinc-800/50">
@@ -181,10 +185,10 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
         </div>
         
         <div className="space-y-1">
-          <StatRow label="Might" value={player.stats.might} buff={player.activeBuffs.might} icon={<Shield size={14} />} statKey="might" xp={player.resources.xp} onLevelUp={onLevelUp} />
-          <StatRow label="Agility" value={player.stats.agility} buff={player.activeBuffs.agility} icon={<Zap size={14} />} statKey="agility" xp={player.resources.xp} onLevelUp={onLevelUp} />
-          <StatRow label="Wisdom" value={player.stats.wisdom} buff={player.activeBuffs.wisdom} icon={<Scroll size={14} />} statKey="wisdom" xp={player.resources.xp} onLevelUp={onLevelUp} />
-          <StatRow label="Spirit" value={player.stats.spirit} buff={player.activeBuffs.spirit} icon={<Brain size={14} />} statKey="spirit" xp={player.resources.xp} onLevelUp={onLevelUp} />
+          <StatRow label="Might" value={player.stats.might} buff={player.activeBuffs.might} icon={<Shield size={14} />} statKey="might" xp={player.resources.xp} onLevelUp={onLevelUp} baseCost={settings.xpBaseCost} />
+          <StatRow label="Agility" value={player.stats.agility} buff={player.activeBuffs.agility} icon={<Zap size={14} />} statKey="agility" xp={player.resources.xp} onLevelUp={onLevelUp} baseCost={settings.xpBaseCost} />
+          <StatRow label="Wisdom" value={player.stats.wisdom} buff={player.activeBuffs.wisdom} icon={<Scroll size={14} />} statKey="wisdom" xp={player.resources.xp} onLevelUp={onLevelUp} baseCost={settings.xpBaseCost} />
+          <StatRow label="Spirit" value={player.stats.spirit} buff={player.activeBuffs.spirit} icon={<Brain size={14} />} statKey="spirit" xp={player.resources.xp} onLevelUp={onLevelUp} baseCost={settings.xpBaseCost} />
         </div>
 
         {/* Alignment Meter */}
@@ -199,8 +203,8 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                 <div className="absolute inset-0 bg-gradient-to-r from-red-900/50 via-zinc-900 to-indigo-900/50" />
                 
                 {/* Threshold Markers */}
-                <div className="absolute left-1/4 top-0 bottom-0 w-px bg-red-500/30" title="Evil Threshold" />
-                <div className="absolute right-1/4 top-0 bottom-0 w-px bg-indigo-500/30" title="Good Threshold" />
+                <div className="absolute top-0 bottom-0 w-px bg-red-500/30" style={{ left: `${((settings.evilThreshold - settings.alignmentMin) / range) * 100}%` }} title="Evil Threshold" />
+                <div className="absolute top-0 bottom-0 w-px bg-indigo-500/30" style={{ left: `${((settings.goodThreshold - settings.alignmentMin) / range) * 100}%` }} title="Good Threshold" />
                 
                 {/* Indicator */}
                 <div 
@@ -219,7 +223,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
           <ScoreTrack label="Explore" value={player.scoring.explore} icon={<MapIcon size={12} />} color="text-emerald-500" />
           <ScoreTrack label="Champion" value={player.scoring.champion} icon={<Crosshair size={12} />} color="text-red-500" />
           <ScoreTrack label="Fortune" value={player.scoring.fortune} icon={<Gem size={12} />} color="text-yellow-500" />
-          <ScoreTrack label="Spirit" value={player.scoring.spirit} icon={<Sparkles size={12} />} color="text-blue-500" />
+          <ScoreTrack label="Soul" value={player.scoring.soul} icon={<Sparkles size={12} />} color="text-blue-500" />
         </div>
       </div>
 
@@ -263,7 +267,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
         </div>
 
         {/* Middle Tools: Shop & Mana Actions */}
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-4">
              <button 
                 onClick={() => { playSFX('click'); setShowShop(!showShop); }}
                 className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition-all font-bold uppercase text-xs tracking-wider
@@ -287,6 +291,20 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                 <RefreshCw size={16} />
                 Transmute (1 Mana)
              </button>
+
+             <button
+                onClick={onDiscardHand}
+                disabled={player.resources.mana < 1}
+                className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition-all font-bold uppercase text-xs tracking-wider
+                    ${player.resources.mana < 1
+                         ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                         : 'bg-red-900/20 border-red-800 text-red-400 hover:bg-red-900/40'}
+                `}
+                title="Spend 1 Mana to discard your entire hand and draw 5 new cards"
+            >
+                <Trash2 size={16} />
+                Discard Hand (1 Mana)
+            </button>
         </div>
 
         {/* Shop Overlay Area */}
@@ -388,7 +406,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                     disabled={false} // Always available
                     onClick={() => onSelfAction('dark_pact')}
                     manaCost={0}
-                    tooltip="Sacrifice goodness for power. Alignment -3."
+                    tooltip={`Sacrifice goodness for power. Alignment -3.`}
                     variant="evil"
                 />
                 <ActionButton
@@ -399,7 +417,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                     disabled={player.resources.mana < 2}
                     onClick={() => onSelfAction('purify')}
                     manaCost={2}
-                    tooltip="Spend 2 Mana to cleanse the soul. Alignment +2."
+                    tooltip={`Spend 2 Mana to cleanse the soul. Alignment +2.`}
                     variant="good"
                 />
             </div>
