@@ -9,7 +9,7 @@ export interface Card {
   id: string;
 }
 
-export type CharacterClass = 'Druid' | 'Rogue' | 'Paladin' | 'Alchemist' | 'Sorceror';
+export type CharacterClass = 'Druid' | 'Ranger' | 'Paladin' | 'Alchemist' | 'Necromancer' | 'Bard';
 export type Difficulty = 'Easy' | 'Normal' | 'Hard';
 
 export interface PlayerStats {
@@ -43,6 +43,7 @@ export interface PlayerState {
   items: string[];
   artifacts: string[];
   activeBuffs: Partial<Record<keyof PlayerStats, number>>;
+  alignment: number; // Range -10 (Evil) to 10 (Good)
 }
 
 export type GamePhase = 'setup' | 'playing' | 'resolving' | 'round_end' | 'game_over';

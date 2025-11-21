@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { CharacterClass, GamePhase, PlayerState, Card, AdventureLocation, TurnResult, StatAttribute, HighScore, NodeModifier, Difficulty, TurnRecord } from './types';
-import { CLASS_DEFAULTS, ADVENTURE_LOCATIONS, INITIAL_HEALTH, HAND_SIZE } from './constants';
+import { CLASS_DEFAULTS, ADVENTURE_LOCATIONS, INITIAL_HEALTH, HAND_SIZE, EVIL_THRESHOLD, GOOD_THRESHOLD, MIN_ALIGNMENT, MAX_ALIGNMENT } from './constants';
 import { createDeck, shuffleDeck, getSuitSymbol } from './utils/deck';
 import { getHighScores, saveHighScore } from './utils/storage';
 import { generateLocationModifiers } from './utils/modifiers';
+import { playSFX } from './utils/sound';
 import PlayingCard from './components/PlayingCard';
 import PlayerDashboard from './components/PlayerDashboard';
 import AdventureBoard from './components/AdventureBoard';
@@ -44,7 +45,8 @@ const App: React.FC = () => {
     scoring: { explore: 0, champion: 0, fortune: 0, spirit: 0 },
     items: [],
     artifacts: [],
-    activeBuffs: {}
+    activeBuffs: {},
+    alignment: 0
   });
 
   useEffect(() => {
@@ -54,13 +56,15 @@ const App: React.FC = () => {
   // --- Game Logic ---
 
   const startGame = (selectedClass: CharacterClass) => {
+    playSFX('start');
     setPlayer(prev => ({
       ...prev,
       class: selectedClass,
       stats: CLASS_DEFAULTS[selectedClass].stats,
       resources: { health: INITIAL_HEALTH, maxHealth: INITIAL_HEALTH, gold: 0, mana: 0, xp: 0 },
       scoring: { explore: 0, champion: 0, fortune: 0, spirit: 0 },
-      activeBuffs: {}
+      activeBuffs: {},
+      alignment: 0
     }));
     
     // Initialize Locations with Random Modifiers
@@ -100,6 +104,7 @@ const App: React.FC = () => {
   };
 
   const toggleCardSelection = (cardId: string) => {
+      playSFX('click');
       if (selectedCardIds.includes(cardId)) {
           setSelectedCardIds(prev => prev.filter(id => id !== cardId));
       } else {
@@ -123,10 +128,16 @@ const App: React.FC = () => {
     // Apply Difficulty Setting Modifier
     if (difficulty === 'Easy') {
         effectiveDungeonValue = Math.max(1, effectiveDungeonValue - 2);
-        modifierEffect = "(Easy Mode -2) ";
+        modifierEffect = "(Easy -2) ";
     } else if (difficulty === 'Hard') {
         effectiveDungeonValue += 2;
-        modifierEffect = "(Hard Mode +2) ";
+        modifierEffect = "(Hard +2) ";
+    }
+
+    // Good Alignment Penalty (Virtue is hard)
+    if (player.alignment >= GOOD_THRESHOLD) {
+        effectiveDungeonValue += 1;
+        modifierEffect += " (Virtue +1) ";
     }
 
     // Apply Player Card Logic (Filter out banned suits)
@@ -157,9 +168,22 @@ const App: React.FC = () => {
     setPlayer(prev => {
       const newResources = { ...prev.resources };
       const newScoring = { ...prev.scoring };
+      let newAlignment = prev.alignment;
       
       if (success) {
+        // --- Sound Logic for Success ---
+        if (actionType === 'rest') playSFX('heal');
+        else if (actionType === 'loot') playSFX('coin');
+        else if (actionType === 'study') playSFX('magic');
+        else if (actionType === 'train') playSFX('block');
+        else playSFX('attack'); // Explore/Default
+
         message = "SUCCESS!";
+
+        // Good Alignment Reward (Virtue pays off in spirit)
+        if (prev.alignment >= GOOD_THRESHOLD) {
+            newScoring.spirit += 1; // Bonus points
+        }
         
         // Calculate Margin Bonuses
         let extraAmount = 0;
@@ -194,6 +218,7 @@ const App: React.FC = () => {
              message = `Found ${totalGold} Gold!`;
              detailsLog = `+${totalGold} Gold`;
              if (extraAmount > 0) extraMsg = ` (+${extraAmount} Critical)`;
+             // Greed shifts slightly evil? Let's keep it neutral for now unless specified, stick to buttons.
         }
         else if (actionType === 'study') {
              // Base 1, +1 per 4 margin
@@ -222,6 +247,10 @@ const App: React.FC = () => {
                  detailsLog += ", +1 Gold";
              }
         }
+        else if (actionType === 'dark_pact') {
+            // handled before resolveTurn typically, but if routed here:
+            // logic in handleAction
+        }
 
         if (extraMsg) message += extraMsg;
 
@@ -231,6 +260,8 @@ const App: React.FC = () => {
         }
 
       } else {
+        playSFX('damage'); // FAIL SOUND
+
         // Failure: Push Your Luck Penalty
         const diffDamage = Math.max(0, effectiveDungeonValue - playerTotal);
         const cardPenalty = playerCards.length; // "lose one health per card"
@@ -242,7 +273,7 @@ const App: React.FC = () => {
         detailsLog = `Took ${damage} Dmg`;
       }
 
-      return { ...prev, resources: newResources, scoring: newScoring };
+      return { ...prev, resources: newResources, scoring: newScoring, alignment: newAlignment };
     });
 
     if (success && actionType.startsWith('explore:')) {
@@ -279,6 +310,34 @@ const App: React.FC = () => {
   };
 
   const handleAction = (type: 'self' | 'location', target: string) => {
+    if (type === 'self' && (target === 'dark_pact' || target === 'purify')) {
+        // Handle Special Alignment Actions
+        if (target === 'dark_pact') {
+             playSFX('evil');
+             setPlayer(prev => ({
+                 ...prev,
+                 resources: { ...prev.resources, mana: prev.resources.mana + 5 },
+                 alignment: Math.max(MIN_ALIGNMENT, prev.alignment - 3)
+             }));
+             return; 
+        }
+        if (target === 'purify') {
+             if (player.resources.mana < 2) return;
+             playSFX('heal');
+             setPlayer(prev => ({
+                 ...prev,
+                 resources: { 
+                     ...prev.resources, 
+                     mana: prev.resources.mana - 2,
+                     health: Math.min(prev.resources.maxHealth, prev.resources.health + 3)
+                 },
+                 alignment: Math.min(MAX_ALIGNMENT, prev.alignment + 2)
+             }));
+             return;
+        }
+    }
+
+
     if (selectedCardIds.length === 0) return;
     
     const selectedCards = hand.filter(c => selectedCardIds.includes(c.id));
@@ -359,6 +418,7 @@ const App: React.FC = () => {
   };
 
   const handleLevelUp = (stat: StatAttribute | 'PLAYER_LEVEL') => {
+      playSFX('level_up');
       if (stat === 'PLAYER_LEVEL') {
           const levelCost = player.stats.level * 5;
           if (player.resources.xp >= levelCost) {
@@ -389,6 +449,7 @@ const App: React.FC = () => {
 
   const handleBuyItem = (name: string, cost: number, statBuff?: StatAttribute, hpAmount?: number) => {
       if (player.resources.gold >= cost) {
+          playSFX('coin');
           setPlayer(prev => ({
               ...prev,
               resources: { 
@@ -403,6 +464,7 @@ const App: React.FC = () => {
 
   const handleMulligan = () => {
       if (selectedCardIds.length !== 1 || player.resources.mana < 1) return;
+      playSFX('flip');
       
       const cardIdToDiscard = selectedCardIds[0];
       const newCard = drawCards(1)[0];
@@ -417,6 +479,7 @@ const App: React.FC = () => {
 
   const handleRewindFate = () => {
       if (!turnResult || player.resources.mana < 2) return;
+      playSFX('magic');
 
       // Spend Mana
       setPlayer(prev => ({ ...prev, resources: { ...prev.resources, mana: prev.resources.mana - 2 }}));
@@ -463,8 +526,10 @@ const App: React.FC = () => {
                resources: { ...prev.resources, health: Math.max(0, prev.resources.health - newDamage) } 
            }));
            message += ` Took ${newDamage} Damage.`;
+           playSFX('damage');
       } else {
           message += " (Damage prevented)";
+          playSFX('heal');
       }
 
       const newRecord: TurnRecord = {
@@ -496,6 +561,7 @@ const App: React.FC = () => {
 
     setTurnResult(null);
     setSelectedCardIds([]);
+    playSFX('flip');
 
     // Draw back up to HAND_SIZE
     const cardsNeeded = HAND_SIZE - (hand.length - selectedCardIds.length); // Actually selected cards are discarded
@@ -503,6 +569,14 @@ const App: React.FC = () => {
     const remainingHand = hand.filter(c => !selectedCardIds.includes(c.id));
     const newCards = drawCards(selectedCardIds.length); 
     setHand([...remainingHand, ...newCards]);
+
+    // Apply Alignment Passive (Evil Decay)
+    if (player.alignment <= EVIL_THRESHOLD) {
+        setPlayer(prev => ({
+            ...prev,
+            resources: { ...prev.resources, health: Math.max(0, prev.resources.health - 1) }
+        }));
+    }
 
     // Check End of Round
     if (turn >= 5) {
@@ -530,6 +604,17 @@ const App: React.FC = () => {
           setPhase('game_over');
       }
   }, [player.resources.health, phase]);
+  
+  // Sound effect for Game Over
+  useEffect(() => {
+      if (phase === 'game_over') {
+          if (player.resources.health > 0) {
+              playSFX('game_over_win');
+          } else {
+              playSFX('game_over_loss');
+          }
+      }
+  }, [phase, player.resources.health]);
 
   const calculateScore = () => {
       const { scoring, stats, resources, items, artifacts } = player;

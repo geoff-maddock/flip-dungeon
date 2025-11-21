@@ -39,7 +39,31 @@ const GameRules: React.FC<GameRulesProps> = ({ onClose }) => {
             </div>
           </section>
 
-          {/* Section 2: Suits & Bonuses */}
+           {/* Section 2: Alignment */}
+           <section>
+            <h3 className="text-xl font-bold text-zinc-200 mb-3 border-l-4 border-indigo-500 pl-3">Alignment: Good vs Evil</h3>
+            <p className="text-zinc-400 text-sm mb-2">
+                Your actions shift your alignment between Virtue (Good) and Vice (Evil). 
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-red-900/20 border border-red-800 p-3 rounded">
+                    <h4 className="text-red-400 font-bold uppercase text-xs mb-1">Path of Vice (Evil)</h4>
+                    <ul className="text-xs text-zinc-400 list-disc list-inside">
+                        <li><strong>Special Actions:</strong> Use <strong>Dark Pact</strong> to instantly gain Mana, but shift towards evil.</li>
+                        <li><strong>Consequence:</strong> If fully evil (Threshold -5), your soul decays, causing you to <strong>lose 1 Health per turn</strong>.</li>
+                    </ul>
+                </div>
+                <div className="bg-indigo-900/20 border border-indigo-800 p-3 rounded">
+                    <h4 className="text-indigo-400 font-bold uppercase text-xs mb-1">Path of Virtue (Good)</h4>
+                    <ul className="text-xs text-zinc-400 list-disc list-inside">
+                        <li><strong>Special Actions:</strong> Use <strong>Purify</strong> to spend Mana/Gold to heal and shift towards good.</li>
+                        <li><strong>Consequence:</strong> If fully good (Threshold +5), challenges become <strong>harder (+1 Diff)</strong>, but you gain <strong>Bonus Spirit</strong> on every success.</li>
+                    </ul>
+                </div>
+            </div>
+          </section>
+
+          {/* Section 3: Suits & Bonuses */}
           <section>
             <h3 className="text-xl font-bold text-zinc-200 mb-3 border-l-4 border-blue-500 pl-3">Card Suits & Bonuses</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -78,7 +102,7 @@ const GameRules: React.FC<GameRulesProps> = ({ onClose }) => {
             </div>
           </section>
 
-          {/* Section 3: Margin of Success */}
+          {/* Section 4: Margin of Success */}
           <section>
             <h3 className="text-xl font-bold text-zinc-200 mb-3 border-l-4 border-green-500 pl-3">Margin of Success</h3>
             <p className="text-zinc-400 text-sm mb-2">
@@ -91,25 +115,6 @@ const GameRules: React.FC<GameRulesProps> = ({ onClose }) => {
               <li><span className="text-white font-bold">Train:</span> Gain more XP for every 8 margin.</li>
               <li><span className="text-white font-bold">Explore:</span> High margin (5+ or 10+) grants Bonus Gold/XP.</li>
             </ul>
-          </section>
-
-           {/* Section 4: Leveling */}
-           <section>
-            <h3 className="text-xl font-bold text-zinc-200 mb-3 border-l-4 border-purple-500 pl-3">Leveling Up</h3>
-            <p className="text-zinc-400 text-sm mb-2">
-               Experience Points (XP) can be used to upgrade specific stats (Might, Agility, etc.) OR to increase your character's Level.
-            </p>
-            <div className="bg-purple-900/20 p-3 rounded border border-purple-800 flex items-center gap-4">
-                <div className="bg-purple-900/50 p-2 rounded">
-                    <div className="text-[10px] uppercase font-bold text-purple-300">Level Up Benefit</div>
-                    <div className="font-bold text-white">+2 Max Health</div>
-                    <div className="font-bold text-white">Full HP Restore</div>
-                </div>
-                <div className="text-sm text-purple-200">
-                    Cost = Current Level × 5 XP. <br/>
-                    <span className="text-xs opacity-70">Use the button next to your Class Level to upgrade.</span>
-                </div>
-            </div>
           </section>
 
         </div>

@@ -4,16 +4,22 @@ import { CharacterClass, PlayerStats, AdventureLocation } from './types';
 export const INITIAL_HEALTH = 10;
 export const HAND_SIZE = 5;
 
+// Alignment Constants
+export const MAX_ALIGNMENT = 10;
+export const MIN_ALIGNMENT = -10;
+export const EVIL_THRESHOLD = -5;
+export const GOOD_THRESHOLD = 5;
+
 export const CLASS_DEFAULTS: Record<CharacterClass, { stats: PlayerStats; description: string; image: string }> = {
   Druid: {
     stats: { level: 1, might: 1, agility: 2, wisdom: 3, spirit: 4 },
-    description: "Masters of nature and the wild. Strong Spirit and Wisdom.",
+    description: "Masters of nature. Balanced stats with high Spirit.",
     image: "https://images.unsplash.com/photo-1511376777868-611b54f68967?q=80&w=1000&auto=format&fit=crop"
   },
-  Rogue: {
+  Ranger: {
     stats: { level: 1, might: 2, agility: 4, wisdom: 2, spirit: 1 },
-    description: "Swift and cunning. High Agility allows for great movement.",
-    image: "https://images.unsplash.com/photo-1533468398514-885dc21615a6?q=80&w=1000&auto=format&fit=crop"
+    description: "Expert marksmen and trackers. High Agility.",
+    image: "https://images.unsplash.com/photo-1473163928189-364b2c4e1135?q=80&w=1000&auto=format&fit=crop"
   },
   Paladin: {
     stats: { level: 1, might: 4, agility: 1, wisdom: 2, spirit: 3 },
@@ -22,13 +28,18 @@ export const CLASS_DEFAULTS: Record<CharacterClass, { stats: PlayerStats; descri
   },
   Alchemist: {
     stats: { level: 1, might: 1, agility: 3, wisdom: 4, spirit: 2 },
-    description: "Seekers of knowledge and transmutation. High Wisdom.",
+    description: "Seekers of transmutation. High Wisdom for magic.",
     image: "https://images.unsplash.com/photo-1551269901-5c5e14c25df7?q=80&w=1000&auto=format&fit=crop"
   },
-  Sorceror: {
-    stats: { level: 1, might: 1, agility: 2, wisdom: 3, spirit: 4 },
-    description: "Wielders of arcane power. High Spirit and Mana focus.",
-    image: "https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?q=80&w=1000&auto=format&fit=crop"
+  Necromancer: {
+    stats: { level: 1, might: 1, agility: 1, wisdom: 4, spirit: 4 },
+    description: "Wielders of dark arts. High Wisdom and Spirit.",
+    image: "https://images.unsplash.com/photo-1509248961158-e54f6934749c?q=80&w=1000&auto=format&fit=crop"
+  },
+  Bard: {
+    stats: { level: 1, might: 1, agility: 3, wisdom: 3, spirit: 3 },
+    description: "Jacks of all trades. Good Agility, Wisdom and Spirit.",
+    image: "https://images.unsplash.com/photo-1465847899078-b413929f7120?q=80&w=1000&auto=format&fit=crop"
   }
 };
 

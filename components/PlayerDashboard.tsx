@@ -1,13 +1,15 @@
 
 import React, { useState } from 'react';
 import { PlayerState, Card, StatAttribute } from '../types';
-import { Heart, Coins, Star, Sparkles, User, Shield, Zap, Scroll, Brain, Trophy, Map as MapIcon, Crosshair, Gem, ArrowUpCircle, ShoppingBag, RefreshCw, Zap as ZapIcon } from 'lucide-react';
+import { Heart, Coins, Star, Sparkles, User, Shield, Zap, Scroll, Brain, Trophy, Map as MapIcon, Crosshair, Gem, ArrowUpCircle, ShoppingBag, RefreshCw, Skull, Sun } from 'lucide-react';
 import { getSuitSymbol } from '../utils/deck';
+import { EVIL_THRESHOLD, GOOD_THRESHOLD, MIN_ALIGNMENT, MAX_ALIGNMENT } from '../constants';
+import { playSFX } from '../utils/sound';
 
 interface PlayerDashboardProps {
   player: PlayerState;
   selectedCards: Card[];
-  onSelfAction: (actionType: 'rest' | 'train' | 'loot' | 'study') => void;
+  onSelfAction: (actionType: 'rest' | 'train' | 'loot' | 'study' | 'dark_pact' | 'purify') => void;
   onLevelUp: (stat: StatAttribute | 'PLAYER_LEVEL') => void;
   onBuyItem: (item: string, cost: number, statBuff?: StatAttribute, amount?: number) => void;
   onMulligan: () => void;
@@ -46,7 +48,7 @@ const StatRow = ({
          </span>
          {canUpgrade && (
             <button 
-              onClick={() => onLevelUp(statKey)}
+              onClick={() => { playSFX('click'); onLevelUp(statKey); }}
               className="ml-2 p-1 bg-zinc-800 hover:bg-green-900/50 text-green-500 hover:text-green-400 rounded transition-colors border border-transparent hover:border-green-800"
               title={`Upgrade ${label} for ${cost} XP`}
             >
@@ -84,16 +86,18 @@ const ActionButton = ({
   onClick, 
   disabled,
   manaCost,
-  tooltip
+  tooltip,
+  variant = 'neutral'
 }: { 
   label: string; 
   subtext: string; 
   icon: React.ReactNode; 
-  suit: string; 
+  suit?: string; 
   onClick: () => void; 
   disabled: boolean;
   manaCost: number;
   tooltip: string;
+  variant?: 'neutral' | 'evil' | 'good';
 }) => (
   <button
     onClick={onClick}
@@ -102,19 +106,24 @@ const ActionButton = ({
       relative flex flex-col items-start p-3 rounded-lg border transition-all w-full text-left overflow-hidden
       ${disabled 
         ? 'bg-zinc-900/30 border-zinc-800 opacity-40 cursor-not-allowed' 
-        : 'bg-zinc-800 border-zinc-600 hover:border-yellow-500/50 hover:bg-zinc-750 hover:shadow-[0_0_15px_rgba(0,0,0,0.5)] cursor-pointer group'
+        : variant === 'evil' 
+            ? 'bg-red-950/30 border-red-900 hover:bg-red-900/50 hover:border-red-500 hover:shadow-red-900/20'
+        : variant === 'good'
+            ? 'bg-indigo-950/30 border-indigo-900 hover:bg-indigo-900/50 hover:border-indigo-500 hover:shadow-indigo-900/20'
+        : 'bg-zinc-800 border-zinc-600 hover:border-yellow-500/50 hover:bg-zinc-750 hover:shadow-[0_0_15px_rgba(0,0,0,0.5)]'
       }
+      cursor-pointer group
     `}
     title={tooltip}
   >
     <div className="flex items-center justify-between w-full mb-1 relative z-10">
-      <div className="flex items-center gap-2 font-black text-zinc-200 group-hover:text-white">
+      <div className={`flex items-center gap-2 font-black ${variant === 'evil' ? 'text-red-400' : variant === 'good' ? 'text-indigo-300' : 'text-zinc-200'} group-hover:text-white`}>
         {icon}
         <span>{label}</span>
       </div>
-      <span className="text-xs font-mono opacity-50">{suit}</span>
+      {suit && <span className="text-xs font-mono opacity-50">{suit}</span>}
     </div>
-    <div className="text-xs text-zinc-500 group-hover:text-zinc-400 relative z-10">{subtext}</div>
+    <div className="text-xs text-zinc-500 group-hover:text-zinc-400 relative z-10 leading-tight">{subtext}</div>
     
     {/* Mana Cost Indicator */}
     {manaCost > 0 && !disabled && (
@@ -134,6 +143,11 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
   const levelUpCost = player.stats.level * 5;
   const canLevelUp = player.resources.xp >= levelUpCost;
 
+  // Alignment Colors
+  const alignmentPercent = ((player.alignment - MIN_ALIGNMENT) / (MAX_ALIGNMENT - MIN_ALIGNMENT)) * 100;
+  const isEvil = player.alignment <= EVIL_THRESHOLD;
+  const isGood = player.alignment >= GOOD_THRESHOLD;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-zinc-950/80 backdrop-blur-md p-4 md:p-6 rounded-xl shadow-2xl border border-zinc-800/50">
       
@@ -148,7 +162,6 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
             <div className="flex items-center justify-between">
                 <p className="text-xs text-zinc-500 font-medium">Lvl {player.stats.level}</p>
                 
-                {/* Player Level Up Button */}
                 <button
                     onClick={() => onLevelUp('PLAYER_LEVEL')}
                     disabled={!canLevelUp}
@@ -172,6 +185,33 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
           <StatRow label="Agility" value={player.stats.agility} buff={player.activeBuffs.agility} icon={<Zap size={14} />} statKey="agility" xp={player.resources.xp} onLevelUp={onLevelUp} />
           <StatRow label="Wisdom" value={player.stats.wisdom} buff={player.activeBuffs.wisdom} icon={<Scroll size={14} />} statKey="wisdom" xp={player.resources.xp} onLevelUp={onLevelUp} />
           <StatRow label="Spirit" value={player.stats.spirit} buff={player.activeBuffs.spirit} icon={<Brain size={14} />} statKey="spirit" xp={player.resources.xp} onLevelUp={onLevelUp} />
+        </div>
+
+        {/* Alignment Meter */}
+        <div className="pt-4 border-t border-zinc-800/50">
+            <div className="flex justify-between text-[10px] font-bold uppercase mb-1">
+                <span className={player.alignment < 0 ? "text-red-500" : "text-zinc-600"}>Vice</span>
+                <span className="text-zinc-400">Alignment</span>
+                <span className={player.alignment > 0 ? "text-indigo-400" : "text-zinc-600"}>Virtue</span>
+            </div>
+            <div className="h-3 bg-zinc-900 rounded-full border border-zinc-800 relative overflow-hidden">
+                {/* Background Gradient */}
+                <div className="absolute inset-0 bg-gradient-to-r from-red-900/50 via-zinc-900 to-indigo-900/50" />
+                
+                {/* Threshold Markers */}
+                <div className="absolute left-1/4 top-0 bottom-0 w-px bg-red-500/30" title="Evil Threshold" />
+                <div className="absolute right-1/4 top-0 bottom-0 w-px bg-indigo-500/30" title="Good Threshold" />
+                
+                {/* Indicator */}
+                <div 
+                    className="absolute top-0 bottom-0 w-2 bg-white rounded-full shadow-[0_0_10px_white] transition-all duration-500"
+                    style={{ left: `calc(${alignmentPercent}% - 4px)` }}
+                />
+            </div>
+            <div className="flex justify-between text-[9px] text-zinc-600 mt-1 font-mono">
+                <span>{isEvil ? "Dark Pact Active (-1 HP/Turn)" : ""}</span>
+                <span>{isGood ? "Divine Favor Active (+Diff / +Score)" : ""}</span>
+            </div>
         </div>
 
         <div className="pt-4 border-t border-zinc-800/50 space-y-3">
@@ -225,7 +265,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
         {/* Middle Tools: Shop & Mana Actions */}
         <div className="flex gap-4">
              <button 
-                onClick={() => setShowShop(!showShop)}
+                onClick={() => { playSFX('click'); setShowShop(!showShop); }}
                 className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition-all font-bold uppercase text-xs tracking-wider
                     ${showShop ? 'bg-yellow-900/20 border-yellow-600 text-yellow-500' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'}
                 `}
@@ -292,10 +332,10 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                     <span className="text-red-500">Not enough Mana ({manaCost} needed)</span>
                  )
                ) : (
-                  <span className="text-zinc-700">Select cards from hand</span>
+                  <span className="text-zinc-700">Select cards from hand for basic actions</span>
                )}
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                <ActionButton 
                   label="REST" 
                   subtext="Heal HP (Spirit)" 
@@ -336,6 +376,32 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                   manaCost={manaCost}
                    tooltip="Base: 1 Mana. +1 per 4 Margin."
                />
+            </div>
+            
+            {/* Alignment Actions */}
+            <div className="grid grid-cols-2 gap-3 border-t border-zinc-800/50 pt-4">
+                <ActionButton
+                    label="DARK PACT"
+                    subtext="Gain 5 Mana, Shift Evil"
+                    icon={<Skull size={16} />}
+                    suit={undefined}
+                    disabled={false} // Always available
+                    onClick={() => onSelfAction('dark_pact')}
+                    manaCost={0}
+                    tooltip="Sacrifice goodness for power. Alignment -3."
+                    variant="evil"
+                />
+                <ActionButton
+                    label="PURIFY"
+                    subtext="Heal 3 HP, Shift Good"
+                    icon={<Sun size={16} />}
+                    suit={undefined}
+                    disabled={player.resources.mana < 2}
+                    onClick={() => onSelfAction('purify')}
+                    manaCost={2}
+                    tooltip="Spend 2 Mana to cleanse the soul. Alignment +2."
+                    variant="good"
+                />
             </div>
         </div>
       </div>
