@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flip Dungeon</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* Custom scrollbar for dark theme aesthetics */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #09090b; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #27272a; 
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #3f3f46; 
+      }
+      
+      /* Organic Texture Background */
+      .bg-texture {
+        background-color: #09090b;
+        background-image: 
+          radial-gradient(circle at 15% 50%, rgba(236, 72, 153, 0.08) 0%, transparent 35%),
+          radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.08) 0%, transparent 35%),
+          radial-gradient(circle at 50% 80%, rgba(234, 179, 8, 0.08) 0%, transparent 35%);
+      }
+      
+      .bg-grid-pattern {
+        background-image: 
+          linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        background-size: 32px 32px;
+        mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+      }
+
+      @keyframes float {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-5px); }
+        100% { transform: translateY(0px); }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0"
+  }
+}
+</script>
+</head>
+  <body class="bg-zinc-950 text-zinc-100 overflow-hidden bg-texture">
+    <div class="fixed inset-0 pointer-events-none bg-grid-pattern z-0"></div>
+    <div id="root" class="relative z-10 h-full"></div>
+  </body>
+</html>
