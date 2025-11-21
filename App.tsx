@@ -1,18 +1,20 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CharacterClass, GamePhase, PlayerState, Card, AdventureLocation, TurnResult, StatAttribute, HighScore, NodeModifier, Difficulty, TurnRecord, GameSettings, Encounter } from './types';
 import { CLASS_DEFAULTS, ADVENTURE_LOCATIONS, DEFAULT_SETTINGS } from './constants';
 import { createDeck, shuffleDeck } from './utils/deck';
 import { getHighScores, saveHighScore } from './utils/storage';
 import { generateEncounters, generateRandomLocation } from './utils/modifiers';
-import { playSFX } from './utils/sound';
+import { playSFX, playPCMAudio } from './utils/sound';
+import { generateClassIcon, generateAdventureStorySpeech } from './utils/ai';
+import { generateQuests, checkQuestCompletion } from './utils/quests';
 import PlayingCard from './components/PlayingCard';
 import PlayerDashboard from './components/PlayerDashboard';
 import AdventureBoard from './components/AdventureBoard';
 import Scoreboard from './components/Scoreboard';
 import GameRules from './components/GameRules';
 import AdminPanel from './components/AdminPanel';
-import { Skull, Trophy, RefreshCcw, Save, TrendingUp, HelpCircle, Settings } from 'lucide-react';
+import { Skull, Trophy, RefreshCcw, Save, TrendingUp, HelpCircle, Settings, Wand2, Loader2, Copy, X, Mic2, Volume2 } from 'lucide-react';
 
 const App: React.FC = () => {
   // Settings State
@@ -27,8 +29,11 @@ const App: React.FC = () => {
   
   // Decks & Hand
   const [playerDeck, setPlayerDeck] = useState<Card[]>([]);
+  const [playerDiscard, setPlayerDiscard] = useState<Card[]>([]);
   const [dungeonDeck, setDungeonDeck] = useState<Card[]>([]);
+  const [dungeonDiscard, setDungeonDiscard] = useState<Card[]>([]);
   const [hand, setHand] = useState<Card[]>([]);
+  const [viewingDiscard, setViewingDiscard] = useState<'player' | 'dungeon' | null>(null);
   
   // Selection State
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
@@ -41,6 +46,12 @@ const App: React.FC = () => {
   const [showScoreboard, setShowScoreboard] = useState(false);
   const [showRules, setShowRules] = useState(false);
 
+  // AI Art & Audio State
+  const [customClassImages, setCustomClassImages] = useState<Record<string, string>>({});
+  const [generatingImages, setGeneratingImages] = useState<string[]>([]);
+  const [isGeneratingStory, setIsGeneratingStory] = useState(false);
+  const generationStarted = useRef(false);
+
   // Game State
   const [locations, setLocations] = useState<AdventureLocation[]>(ADVENTURE_LOCATIONS);
   const [player, setPlayer] = useState<PlayerState>({
@@ -51,7 +62,10 @@ const App: React.FC = () => {
     items: [],
     artifacts: [],
     activeBuffs: {},
-    alignment: 0
+    alignment: 0,
+    quests: [],
+    locationsCleared: 0,
+    damageTaken: 0
   });
 
   // Load Settings from LocalStorage on mount
@@ -66,6 +80,41 @@ const App: React.FC = () => {
     }
     setHighScores(getHighScores());
   }, []);
+
+  // Auto-generate class icons on mount
+  useEffect(() => {
+      if (generationStarted.current) return;
+      generationStarted.current = true;
+
+      const generateAllIcons = async () => {
+          const classes = Object.keys(CLASS_DEFAULTS) as CharacterClass[];
+          for (const className of classes) {
+              // Stagger slightly to avoid rate limits and allow UI updates
+              await new Promise(resolve => setTimeout(resolve, 200));
+              
+              setGeneratingImages(prev => [...prev, className]);
+              try {
+                  const image = await generateClassIcon(className, CLASS_DEFAULTS[className].description);
+                  if (image) {
+                      setCustomClassImages(prev => ({ ...prev, [className]: image }));
+                  }
+              } catch (e) {
+                  console.error("Auto-generation failed for", className, e);
+              } finally {
+                  setGeneratingImages(prev => prev.filter(c => c !== className));
+              }
+          }
+      };
+
+      generateAllIcons();
+  }, []);
+
+  // Monitor Quest Progress whenever player state changes
+  useEffect(() => {
+     if (phase === 'playing') {
+         setPlayer(prev => checkQuestCompletion(prev));
+     }
+  }, [player.resources, player.stats, player.scoring, player.items, player.locationsCleared, player.alignment, phase]);
 
   const handleSaveSettings = (newSettings: GameSettings) => {
     setSettings(newSettings);
@@ -90,11 +139,13 @@ const App: React.FC = () => {
       resources: { health: settings.initialHealth, maxHealth: settings.initialHealth, gold: 0, mana: 0, xp: 0 },
       scoring: { explore: 0, champion: 0, fortune: 0, soul: 0 },
       activeBuffs: {},
-      alignment: 0
+      alignment: 0,
+      quests: generateQuests(4),
+      locationsCleared: 0,
+      damageTaken: 0
     }));
     
     // Initialize Locations
-    // Deep copy locations to avoid mutation of constants and regenerate random modifiers/encounters
     setLocations(ADVENTURE_LOCATIONS.map(l => ({ 
       ...l, 
       currentEncounterIndex: 0,
@@ -108,6 +159,9 @@ const App: React.FC = () => {
     setScoreSaved(false);
     setPlayerName('');
     setSelectedCardIds([]);
+    setPlayerDiscard([]);
+    setDungeonDiscard([]);
+    setIsGeneratingStory(false);
     
     // Initialize Decks
     const pDeck = shuffleDeck(createDeck());
@@ -119,20 +173,35 @@ const App: React.FC = () => {
 
   const drawCards = (count: number) => {
     let currentDeck = [...playerDeck];
+    let currentDiscard = [...playerDiscard];
     let drawn: Card[] = [];
     
     if (currentDeck.length >= count) {
         drawn = currentDeck.slice(0, count);
         setPlayerDeck(currentDeck.slice(count));
     } else {
+        // Draw remaining from deck
         drawn = [...currentDeck];
-        const remainingNeeded = count - currentDeck.length;
-        const newDeck = shuffleDeck(createDeck());
-        const additionalCards = newDeck.slice(0, remainingNeeded);
-        drawn = [...drawn, ...additionalCards];
-        setPlayerDeck(newDeck.slice(remainingNeeded));
+        const needed = count - currentDeck.length;
+        
+        if (currentDiscard.length > 0) {
+            // Reshuffle discard
+            const newDeck = shuffleDeck(currentDiscard);
+            setPlayerDiscard([]);
+            
+            // Draw rest
+            const additional = newDeck.slice(0, needed);
+            drawn = [...drawn, ...additional];
+            setPlayerDeck(newDeck.slice(needed));
+        } else {
+            // Emergency: New deck (if user burns through 52 cards without discarding?)
+            // Or if just start of game and logic requires it
+            const emergencyDeck = shuffleDeck(createDeck());
+            const additional = emergencyDeck.slice(0, needed);
+            drawn = [...drawn, ...additional];
+            setPlayerDeck(emergencyDeck.slice(needed));
+        }
     }
-
     return drawn;
   };
 
@@ -199,6 +268,8 @@ const App: React.FC = () => {
       const newResources = { ...prev.resources };
       const newScoring = { ...prev.scoring };
       const newAlignment = prev.alignment;
+      let locationsCleared = prev.locationsCleared;
+      let damageTaken = prev.damageTaken;
       
       if (success) {
         if (actionType === 'rest') playSFX('heal');
@@ -283,45 +354,50 @@ const App: React.FC = () => {
         damage = Math.max(1, damage);
         
         newResources.health = Math.max(0, newResources.health - damage);
+        damageTaken += damage;
         message = `FAILED! Took ${damage} Damage.`;
         detailsLog = `Took ${damage} Dmg`;
       }
 
-      return { ...prev, resources: newResources, scoring: newScoring, alignment: newAlignment };
+      return { ...prev, resources: newResources, scoring: newScoring, alignment: newAlignment, locationsCleared, damageTaken };
     });
 
     if (success && actionType.startsWith('explore:')) {
         const locId = actionType.split(':')[1];
-        // Rule: Margin >= 10 grants double movement
         const progressAmount = margin >= 10 ? 2 : 1;
 
         setLocations(prev => prev.map(l => {
             if (l.id !== locId) return l;
 
-            // Branching Logic
             let newEncounters = [...l.encounters];
             const currentEncounter = l.encounters[l.currentEncounterIndex];
             
-            // Handle Branching based on first card
+            // Determine if branch logic applies
             if (currentEncounter.branch && playerCards.length > 0) {
                 const firstCard = playerCards[0];
                 const isRed = ['hearts', 'diamonds'].includes(firstCard.suit);
                 const branchPath = isRed ? currentEncounter.branch.paths.red : currentEncounter.branch.paths.black;
                 
                 if (branchPath) {
-                    // If branching, we replace the *rest* of the path with the branch path
-                    // Current logic: we are AT index. We want the NEXT steps to be the branch.
-                    // So we remove everything after current index, and append branch path.
                     const remaining = newEncounters.slice(0, l.currentEncounterIndex + 1);
                     newEncounters = [...remaining, ...branchPath];
                     message += isRed ? " (Path: Red)" : " (Path: Black)";
                 }
             }
 
+            const nextIndex = l.currentEncounterIndex + progressAmount;
+            const maxIndex = newEncounters.length;
+
+            // Check if location cleared
+            if (l.currentEncounterIndex < maxIndex && nextIndex >= maxIndex) {
+                setPlayer(p => ({ ...p, locationsCleared: p.locationsCleared + 1 }));
+                message += " Location Cleared!";
+            }
+
             return { 
                 ...l, 
                 encounters: newEncounters,
-                currentEncounterIndex: Math.min(newEncounters.length, l.currentEncounterIndex + progressAmount) 
+                currentEncounterIndex: Math.min(maxIndex, nextIndex) 
             };
         }));
     }
@@ -353,7 +429,7 @@ const App: React.FC = () => {
   };
 
   const handleAction = (type: 'self' | 'location', target: string) => {
-    // Special Alignment Actions (unchanged)
+    // Special Alignment Actions
     if (type === 'self' && (target === 'dark_pact' || target === 'purify')) {
         if (target === 'dark_pact') {
              playSFX('evil');
@@ -391,7 +467,6 @@ const App: React.FC = () => {
     if (type === 'location') {
         const loc = locations.find(l => l.id === target);
         if (loc) {
-            // Updated to use encounters array
             const encounter = loc.encounters[loc.currentEncounterIndex];
             activeModifier = encounter ? encounter.modifier : null;
             
@@ -410,7 +485,15 @@ const App: React.FC = () => {
 
     // 1. Draw Dungeon Card
     let dDeck = [...dungeonDeck];
-    if (dDeck.length === 0) dDeck = shuffleDeck(createDeck());
+    if (dDeck.length === 0) {
+        // Reshuffle discard if deck empty
+        if (dungeonDiscard.length > 0) {
+            dDeck = shuffleDeck(dungeonDiscard);
+            setDungeonDiscard([]);
+        } else {
+             dDeck = shuffleDeck(createDeck());
+        }
+    }
     const dCard = dDeck[0];
     setDungeonDeck(dDeck.slice(1));
 
@@ -453,7 +536,6 @@ const App: React.FC = () => {
         }
     }
 
-    // Bonus: +2 for EACH card matching suit
     suitBonus = selectedCards.filter(c => c.suit === targetSuit).length * 2;
 
     resolveTurn(selectedCards, dCard, actionKey, baseStat + buff, suitBonus, activeModifier);
@@ -499,7 +581,8 @@ const App: React.FC = () => {
                   gold: prev.resources.gold - cost,
                   health: hpAmount ? Math.min(prev.resources.maxHealth, prev.resources.health + hpAmount) : prev.resources.health
               },
-              activeBuffs: statBuff ? { ...prev.activeBuffs, [statBuff]: (prev.activeBuffs[statBuff] || 0) + 2 } : prev.activeBuffs
+              activeBuffs: statBuff ? { ...prev.activeBuffs, [statBuff]: (prev.activeBuffs[statBuff] || 0) + 2 } : prev.activeBuffs,
+              items: [...prev.items, name]
           }));
       }
   };
@@ -508,6 +591,12 @@ const App: React.FC = () => {
       if (selectedCardIds.length !== 1 || player.resources.mana < 1) return;
       playSFX('flip');
       const cardIdToDiscard = selectedCardIds[0];
+      const cardToDiscard = hand.find(c => c.id === cardIdToDiscard);
+      
+      if (cardToDiscard) {
+          setPlayerDiscard(prev => [...prev, cardToDiscard]);
+      }
+
       const newCard = drawCards(1)[0];
       setHand(prev => prev.map(c => c.id === cardIdToDiscard ? newCard : c));
       setPlayer(prev => ({
@@ -524,6 +613,7 @@ const App: React.FC = () => {
         ...prev,
         resources: { ...prev.resources, mana: prev.resources.mana - 1 }
     }));
+    setPlayerDiscard(prev => [...prev, ...hand]);
     const newHand = drawCards(settings.handSize);
     setHand(newHand);
     setSelectedCardIds([]);
@@ -534,9 +624,20 @@ const App: React.FC = () => {
       playSFX('magic');
 
       setPlayer(prev => ({ ...prev, resources: { ...prev.resources, mana: prev.resources.mana - 2 }}));
+      
+      // Current dungeon card is discarded
+      setDungeonDiscard(prev => [...prev, turnResult.dungeonCard]);
 
+      // Draw new dungeon card
       let dDeck = [...dungeonDeck];
-      if (dDeck.length === 0) dDeck = shuffleDeck(createDeck());
+      if (dDeck.length === 0) {
+          if (dungeonDiscard.length > 0) {
+              dDeck = shuffleDeck(dungeonDiscard);
+              setDungeonDiscard([]);
+          } else {
+              dDeck = shuffleDeck(createDeck());
+          }
+      }
       const newDCard = dDeck[0]; 
       setDungeonDeck(dDeck.slice(1));
 
@@ -553,10 +654,13 @@ const App: React.FC = () => {
       
       setPlayer(prev => {
           const r = { ...prev.resources };
+          let d = prev.damageTaken;
+          // Heal back damage taken previously in this turn resolution step (simulated)
           if (!turnResult.success && turnResult.damage) {
               r.health = Math.min(r.maxHealth, r.health + turnResult.damage);
+              d = Math.max(0, d - turnResult.damage);
           }
-          return { ...prev, resources: r };
+          return { ...prev, resources: r, damageTaken: d };
       });
 
       let newDamage = 0;
@@ -566,7 +670,8 @@ const App: React.FC = () => {
            newDamage = Math.max(1, diffDamage + cardPenalty);
            setPlayer(prev => ({ 
                ...prev, 
-               resources: { ...prev.resources, health: Math.max(0, prev.resources.health - newDamage) } 
+               resources: { ...prev.resources, health: Math.max(0, prev.resources.health - newDamage) },
+               damageTaken: prev.damageTaken + newDamage
            }));
            message += ` Took ${newDamage} Damage.`;
            playSFX('damage');
@@ -605,10 +710,50 @@ const App: React.FC = () => {
       setLocations(prev => [...prev, newLocation]);
   };
 
+  const handleGenerateArt = async (e: React.MouseEvent, className: string, description: string) => {
+      e.stopPropagation();
+      if (generatingImages.includes(className)) return;
+      playSFX('magic');
+      
+      setGeneratingImages(prev => [...prev, className]);
+      const base64Image = await generateClassIcon(className, description);
+      
+      if (base64Image) {
+          setCustomClassImages(prev => ({ ...prev, [className]: base64Image }));
+          playSFX('level_up');
+      }
+      
+      setGeneratingImages(prev => prev.filter(c => c !== className));
+  };
+
+  const handleTellTale = async () => {
+    if (isGeneratingStory) return;
+    setIsGeneratingStory(true);
+    const score = calculateScore();
+    const outcome = player.resources.health > 0 ? 'Victory' : 'Defeat';
+    
+    const base64Audio = await generateAdventureStorySpeech(
+        player.class,
+        outcome,
+        score,
+        round,
+        difficulty
+    );
+    
+    if (base64Audio) {
+        await playPCMAudio(base64Audio);
+    }
+    
+    setIsGeneratingStory(false);
+  };
+
   const endTurn = () => {
     setPhase('playing');
-    if (turnResult?.pendingRecord) {
+    if (turnResult) {
         setGameHistory(prev => [...prev, turnResult.pendingRecord]);
+        // Move cards to respective discard piles
+        setPlayerDiscard(prev => [...prev, ...turnResult.playerCards]);
+        setDungeonDiscard(prev => [...prev, turnResult.dungeonCard]);
     }
     setTurnResult(null);
     setSelectedCardIds([]);
@@ -632,11 +777,6 @@ const App: React.FC = () => {
         setRound(r => r + 1);
         setTurn(1);
         setPlayer(prev => ({ ...prev, activeBuffs: {} }));
-        
-        // Update Locations for new round (regenerate modifiers where needed, or keep static?)
-        // Let's regenerate dynamic content or increase difficulty.
-        // For now, we'll keep the structure but maybe reset progress? No, adventure continues.
-        // We just keep playing. The difficulty scaler in generateLocation was for init.
       }
     } else {
       setTurn(t => t + 1);
@@ -660,7 +800,7 @@ const App: React.FC = () => {
   }, [phase, player.resources.health]);
 
   const calculateScore = () => {
-      const { scoring, stats, resources, items, artifacts } = player;
+      const { scoring, stats, resources, items, artifacts, quests } = player;
       let total = 0;
       total += scoring.explore * 2;
       total += scoring.champion * 3;
@@ -671,6 +811,12 @@ const App: React.FC = () => {
       total += resources.mana;
       total += items.length * 5;
       total += artifacts.length * 10;
+      
+      // Quest Bonus
+      quests.forEach(q => {
+          if (q.isCompleted) total += q.bonusPoints;
+      });
+
       if (difficulty === 'Easy') total = Math.floor(total * 0.75);
       if (difficulty === 'Hard') total = Math.floor(total * 1.25);
       return total;
@@ -757,22 +903,37 @@ const App: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4 overflow-visible content-start">
-                {Object.entries(CLASS_DEFAULTS).map(([className, details]) => (
-                    <button
-                        key={className}
-                        onClick={() => startGame(className as CharacterClass)}
-                        className="group relative h-32 w-full rounded-2xl overflow-hidden border border-zinc-800 transition-all hover:scale-[1.02] hover:border-zinc-500 hover:shadow-2xl text-left"
-                    >
-                        <div className="absolute inset-0">
-                            <img src={details.image} alt={className} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
-                            <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-transparent" />
-                        </div>
-                        <div className="relative z-10 p-6 flex flex-col justify-center h-full">
-                            <h3 className="text-3xl font-black text-white mb-1 group-hover:text-yellow-400 transition-colors">{className}</h3>
-                            <p className="text-zinc-400 text-sm group-hover:text-zinc-200 transition-colors">{details.description}</p>
-                        </div>
-                    </button>
-                ))}
+                {Object.entries(CLASS_DEFAULTS).map(([className, details]) => {
+                    const isGenerating = generatingImages.includes(className);
+                    const imageSrc = customClassImages[className] || details.image;
+
+                    return (
+                        <button
+                            key={className}
+                            onClick={() => startGame(className as CharacterClass)}
+                            className="group relative h-32 w-full rounded-2xl overflow-hidden border border-zinc-800 transition-all hover:scale-[1.02] hover:border-zinc-500 hover:shadow-2xl text-left"
+                        >
+                            <div className="absolute inset-0">
+                                <img src={imageSrc} alt={className} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
+                                <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-transparent" />
+                                
+                                {/* AI Generation Button */}
+                                <div 
+                                    className="absolute top-2 right-2 z-30 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={(e) => handleGenerateArt(e, className, details.description)}
+                                >
+                                    <div className="bg-black/60 hover:bg-indigo-600 p-2 rounded-full backdrop-blur-sm border border-white/10 text-white transition-colors">
+                                        {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="relative z-10 p-6 flex flex-col justify-center h-full">
+                                <h3 className="text-3xl font-black text-white mb-1 group-hover:text-yellow-400 transition-colors">{className}</h3>
+                                <p className="text-zinc-400 text-sm group-hover:text-zinc-200 transition-colors">{details.description}</p>
+                            </div>
+                        </button>
+                    );
+                })}
             </div>
         </div>
 
@@ -814,8 +975,16 @@ const App: React.FC = () => {
                       <div className="text-sm text-zinc-500 uppercase font-bold mb-2">Final Score</div>
                       <div className="text-6xl font-mono font-black text-white mb-4">{finalScore}</div>
                       
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {player.quests.filter(q => q.isCompleted).map(q => (
+                            <span key={q.id} className="text-[10px] bg-emerald-900/30 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded">
+                                {q.name} (+{q.bonusPoints})
+                            </span>
+                        ))}
+                      </div>
+
                       {!scoreSaved ? (
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 mt-4">
                               <input 
                                   type="text" 
                                   value={playerName}
@@ -833,18 +1002,28 @@ const App: React.FC = () => {
                               </button>
                           </div>
                       ) : (
-                          <div className="text-green-500 font-bold flex items-center justify-center gap-2">
+                          <div className="text-green-500 font-bold flex items-center justify-center gap-2 mt-4">
                               <span>Score Saved!</span>
                           </div>
                       )}
                   </div>
 
-                  <button 
-                    onClick={() => setPhase('setup')}
-                    className="w-full py-3 bg-zinc-100 hover:bg-white text-black font-black rounded-lg transition-colors"
-                  >
-                      PLAY AGAIN
-                  </button>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button 
+                        onClick={handleTellTale}
+                        disabled={isGeneratingStory}
+                        className="py-3 bg-indigo-900/50 hover:bg-indigo-900 text-indigo-200 border border-indigo-700 font-bold rounded-lg transition-all flex items-center justify-center gap-2"
+                    >
+                        {isGeneratingStory ? <Loader2 size={18} className="animate-spin" /> : <Volume2 size={18} />}
+                        Listen to Legend
+                    </button>
+                    <button 
+                        onClick={() => setPhase('setup')}
+                        className="py-3 bg-zinc-100 hover:bg-white text-black font-black rounded-lg transition-colors border border-white"
+                    >
+                        PLAY AGAIN
+                    </button>
+                  </div>
               </div>
           </div>
       );
@@ -888,6 +1067,7 @@ const App: React.FC = () => {
 
       <PlayerDashboard 
         player={player} 
+        characterImage={customClassImages[player.class] || CLASS_DEFAULTS[player.class].image}
         selectedCards={hand.filter(c => selectedCardIds.includes(c.id))}
         onSelfAction={(type) => handleAction('self', type)}
         onLevelUp={handleLevelUp}
@@ -906,8 +1086,26 @@ const App: React.FC = () => {
         onExploreNewLand={handleExploreNewLand}
       />
 
-      <div className="flex-1 flex items-end justify-center pb-8 min-h-[240px]">
-          <div className="flex -space-x-8 md:-space-x-4 hover:space-x-2 transition-all duration-300 p-4">
+      <div className="flex-1 flex flex-col md:flex-row items-end justify-between pb-8 min-h-[240px] gap-8">
+          
+          {/* Player Discard Pile Visual */}
+          <div className="relative hidden md:block group cursor-pointer" onClick={() => playerDiscard.length > 0 && setViewingDiscard('player')}>
+              <div className="w-28 h-44 border-2 border-dashed border-zinc-800 rounded-xl flex items-center justify-center bg-black/20 text-zinc-700 font-bold uppercase text-xs tracking-widest">
+                  Discard
+              </div>
+              {playerDiscard.length > 0 && (
+                  <>
+                    <div className="absolute inset-0 transform rotate-6 translate-x-1">
+                        <PlayingCard card={playerDiscard[playerDiscard.length - 1]} />
+                    </div>
+                    <div className="absolute -top-2 -right-2 bg-zinc-800 text-zinc-300 text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border border-zinc-600 z-10">
+                        {playerDiscard.length}
+                    </div>
+                  </>
+              )}
+          </div>
+
+          <div className="flex -space-x-8 md:-space-x-4 hover:space-x-2 transition-all duration-300 p-4 justify-center w-full md:w-auto">
               {hand.map((card) => {
                   const selectedIndex = selectedCardIds.indexOf(card.id);
                   const isSelected = selectedIndex >= 0;
@@ -922,7 +1120,46 @@ const App: React.FC = () => {
                   );
               })}
           </div>
+          
+           {/* Dungeon Discard Pile Visual (Placeholder to balance layout) */}
+           <div className="relative hidden md:block group cursor-pointer" onClick={() => dungeonDiscard.length > 0 && setViewingDiscard('dungeon')}>
+              <div className="w-28 h-44 border-2 border-dashed border-red-900/30 rounded-xl flex items-center justify-center bg-black/20 text-red-900/50 font-bold uppercase text-xs tracking-widest text-center">
+                  Dungeon<br/>Discard
+              </div>
+              {dungeonDiscard.length > 0 && (
+                  <>
+                    <div className="absolute inset-0 transform -rotate-3 -translate-x-1">
+                        <PlayingCard card={dungeonDiscard[dungeonDiscard.length - 1]} />
+                    </div>
+                    <div className="absolute -top-2 -right-2 bg-red-900 text-red-200 text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border border-red-700 z-10">
+                        {dungeonDiscard.length}
+                    </div>
+                  </>
+              )}
+          </div>
+
       </div>
+      
+      {/* Viewing Discard Modal */}
+      {viewingDiscard && (
+        <div className="fixed inset-0 z-[80] bg-black/90 backdrop-blur flex items-center justify-center p-8 animate-in fade-in" onClick={() => setViewingDiscard(null)}>
+            <div className="relative w-full max-w-5xl bg-zinc-900 border border-zinc-700 rounded-2xl p-6 max-h-[80vh] overflow-y-auto scrollbar-thin" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <Copy /> {viewingDiscard === 'player' ? 'Player Discard Pile' : 'Dungeon Discard Pile'}
+                    </h2>
+                    <button onClick={() => setViewingDiscard(null)} className="text-zinc-500 hover:text-white"><X size={24}/></button>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+                    {(viewingDiscard === 'player' ? playerDiscard : dungeonDiscard).map((card, i) => (
+                        <div key={i} className="transform scale-90 origin-top-left">
+                            <PlayingCard card={card} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* Resolution Overlay */}
       {phase === 'resolving' && turnResult && (

@@ -49,6 +49,25 @@ export interface Scoring {
   soul: number;
 }
 
+// --- Quest Types ---
+export type QuestCriteriaType = 'resource' | 'stat' | 'scoring' | 'item_count' | 'location_cleared' | 'alignment';
+
+export interface QuestCriteria {
+  type: QuestCriteriaType;
+  target: number;
+  subject?: string; // specific resource key or stat key
+  description: string;
+}
+
+export interface Quest {
+  id: string;
+  name: string;
+  description: string;
+  criteria: QuestCriteria[];
+  bonusPoints: number;
+  isCompleted: boolean;
+}
+
 export interface PlayerState {
   class: CharacterClass;
   stats: PlayerStats;
@@ -58,6 +77,9 @@ export interface PlayerState {
   artifacts: string[];
   activeBuffs: Partial<Record<keyof PlayerStats, number>>;
   alignment: number; // Range determined by settings
+  quests: Quest[];
+  locationsCleared: number;
+  damageTaken: number; // Tracked for specific quests
 }
 
 export type GamePhase = 'setup' | 'playing' | 'resolving' | 'round_end' | 'game_over';

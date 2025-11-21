@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { HighScore } from '../types';
-import { Trophy, Crown, Skull, ChevronDown, ChevronUp, Activity, Swords, CheckCircle2, XCircle } from 'lucide-react';
+import { Trophy, Crown, Skull, ChevronDown, ChevronUp, Activity, Swords, CheckCircle2, XCircle, Star } from 'lucide-react';
 
 interface ScoreboardProps {
   scores: HighScore[];
@@ -50,6 +50,7 @@ const Scoreboard: React.FC<ScoreboardProps> = ({ scores, onClose }) => {
                         <div>
                             <div className="font-bold text-white flex items-center gap-2">
                                 {score.playerName}
+                                {score.outcome === 'Victory' && <Star size={14} className="text-yellow-500 fill-yellow-500" />}
                                 {score.outcome === 'Defeat' && <Skull size={14} className="text-red-500" />}
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded border ml-2 uppercase tracking-wider
                                     ${score.difficulty === 'Hard' ? 'border-red-500 text-red-400 bg-red-950/30' : 

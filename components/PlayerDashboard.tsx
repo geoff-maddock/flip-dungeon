@@ -1,12 +1,14 @@
 
 import React, { useState } from 'react';
 import { PlayerState, Card, StatAttribute, GameSettings } from '../types';
-import { Heart, Coins, Star, Sparkles, User, Shield, Zap, Scroll, Brain, Trophy, Map as MapIcon, Crosshair, Gem, ArrowUpCircle, ShoppingBag, RefreshCw, Skull, Sun, Trash2 } from 'lucide-react';
+import { Heart, Coins, Star, Sparkles, User, Shield, Zap, Scroll, Brain, Trophy, Map as MapIcon, Crosshair, Gem, ArrowUpCircle, ShoppingBag, RefreshCw, Skull, Sun, Trash2, ScrollText } from 'lucide-react';
 import { getSuitSymbol } from '../utils/deck';
 import { playSFX } from '../utils/sound';
+import QuestLog from './QuestLog';
 
 interface PlayerDashboardProps {
   player: PlayerState;
+  characterImage?: string;
   selectedCards: Card[];
   onSelfAction: (actionType: 'rest' | 'train' | 'loot' | 'study' | 'dark_pact' | 'purify') => void;
   onLevelUp: (stat: StatAttribute | 'PLAYER_LEVEL') => void;
@@ -18,6 +20,7 @@ interface PlayerDashboardProps {
 
 const StatRow = ({ 
   label, 
+  description,
   value, 
   icon, 
   statKey, 
@@ -27,6 +30,7 @@ const StatRow = ({
   baseCost
 }: { 
   label: string; 
+  description: string;
   value: number; 
   icon: React.ReactNode; 
   statKey: StatAttribute;
@@ -39,23 +43,38 @@ const StatRow = ({
   const canUpgrade = xp >= cost && statKey !== 'level';
 
   return (
-    <div className="flex items-center justify-between bg-zinc-900/50 p-2 rounded border border-zinc-800 relative group hover:border-zinc-700 transition-colors">
+    <div className="flex items-center justify-between bg-zinc-900/50 p-2 rounded border border-zinc-800 relative group hover:border-zinc-700 transition-colors cursor-help">
+      {/* Tooltip */}
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-zinc-950 border border-zinc-700 text-zinc-300 text-[10px] p-3 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50 text-center backdrop-blur-sm transform translate-y-1 group-hover:translate-y-0">
+        <p className="font-bold text-white mb-1">{label}</p>
+        <p className="leading-relaxed">{description}</p>
+        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-700"></div>
+      </div>
+
       <div className="flex items-center gap-2 text-zinc-400 text-xs md:text-sm font-medium">
         {icon}
-        <span>{label}</span>
+        <span className="border-b border-dotted border-zinc-700 group-hover:border-zinc-500 transition-colors">{label}</span>
       </div>
       <div className="flex items-center gap-2">
          {buff ? <span className="text-xs font-bold text-green-400 animate-pulse">+{buff}</span> : null}
          <span className={`font-mono text-lg font-bold ${buff ? 'text-green-400' : 'text-zinc-100'}`}>
             {value + (buff || 0)}
          </span>
-         {canUpgrade && (
+         {statKey !== 'level' && (
             <button 
-              onClick={() => { playSFX('click'); onLevelUp(statKey); }}
-              className="ml-2 p-1 bg-zinc-800 hover:bg-green-900/50 text-green-500 hover:text-green-400 rounded transition-colors border border-transparent hover:border-green-800"
+              onClick={(e) => { e.stopPropagation(); playSFX('click'); onLevelUp(statKey); }}
+              disabled={!canUpgrade}
+              className={`
+                ml-2 px-1.5 py-0.5 rounded transition-all border flex items-center gap-1
+                ${canUpgrade 
+                   ? 'bg-zinc-800 hover:bg-green-900/50 text-green-500 hover:text-green-400 border-zinc-700 hover:border-green-500 shadow-lg shadow-green-900/20 cursor-pointer' 
+                   : 'bg-transparent text-zinc-700 border-transparent cursor-default opacity-50'
+                }
+              `}
               title={`Upgrade ${label} for ${cost} XP`}
             >
-               <ArrowUpCircle size={14} />
+               <span className="text-[10px] font-mono font-bold leading-none">{cost}XP</span>
+               <ArrowUpCircle size={12} />
             </button>
          )}
       </div>
@@ -119,6 +138,7 @@ const ActionButton = ({
     `}
     title={tooltip}
   >
+    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
     <div className="flex items-center justify-between w-full mb-1 relative z-10">
       <div className={`flex items-center gap-2 font-black ${variant === 'evil' ? 'text-red-400' : variant === 'good' ? 'text-indigo-300' : 'text-zinc-200'} group-hover:text-white`}>
         {icon}
@@ -126,19 +146,22 @@ const ActionButton = ({
       </div>
       {suit && <span className="text-xs font-mono opacity-50">{suit}</span>}
     </div>
-    <div className="text-xs text-zinc-500 group-hover:text-zinc-400 relative z-10 leading-tight">{subtext}</div>
+    <div className="text-xs text-zinc-500 group-hover:text-zinc-400 relative z-10 leading-tight whitespace-pre-line">{subtext}</div>
     
     {/* Mana Cost Indicator */}
     {manaCost > 0 && !disabled && (
-        <div className="absolute top-0 right-0 bg-blue-900/80 text-blue-200 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg border-l border-b border-blue-800">
+        <div className="absolute top-0 right-0 bg-blue-900/80 text-blue-200 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg border-l border-b border-blue-800 z-20">
             -{manaCost} Mana
         </div>
     )}
+    
+    {/* Tooltip trigger helper (visual only, actual tooltip is on button title for now) */}
   </button>
 );
 
-const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards, onSelfAction, onLevelUp, onBuyItem, onMulligan, onDiscardHand, settings }) => {
+const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImage, selectedCards, onSelfAction, onLevelUp, onBuyItem, onMulligan, onDiscardHand, settings }) => {
   const [showShop, setShowShop] = useState(false);
+  const [showQuests, setShowQuests] = useState(false);
   const manaCost = Math.max(0, (selectedCards.length - 1) * settings.manaCostPerExtraCard);
   const canAfford = player.resources.mana >= manaCost;
 
@@ -158,19 +181,24 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
       {/* Left: Character Stats */}
       <div className="lg:col-span-3 space-y-4 border-r border-zinc-800/50 pr-0 lg:pr-6">
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-12 h-12 rounded-full bg-indigo-950 flex items-center justify-center border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.15)]">
-             <User className="text-indigo-300" />
+          <div className="w-14 h-14 rounded-full bg-zinc-900 flex items-center justify-center border-2 border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.15)] overflow-hidden shrink-0 relative">
+             {characterImage ? (
+               <img src={characterImage} alt={player.class} className="w-full h-full object-cover" />
+             ) : (
+               <User className="text-indigo-300" />
+             )}
+             <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-full"></div>
           </div>
-          <div className="flex-1">
-            <h2 className="font-black text-xl text-white tracking-tight">{player.class}</h2>
-            <div className="flex items-center justify-between">
-                <p className="text-xs text-zinc-500 font-medium">Lvl {player.stats.level}</p>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-black text-xl text-white tracking-tight truncate">{player.class}</h2>
+            <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-zinc-500 font-medium whitespace-nowrap">Lvl {player.stats.level}</p>
                 
                 <button
                     onClick={() => onLevelUp('PLAYER_LEVEL')}
                     disabled={!canLevelUp}
                     className={`
-                        text-[9px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 transition-all
+                        text-[9px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 transition-all whitespace-nowrap
                         ${canLevelUp 
                             ? 'bg-purple-900/50 text-purple-300 border-purple-500 hover:bg-purple-800 hover:shadow-[0_0_10px_rgba(168,85,247,0.4)]' 
                             : 'bg-zinc-900 text-zinc-600 border-zinc-800 opacity-50 cursor-not-allowed'}
@@ -178,17 +206,57 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                     title={`Cost: ${levelUpCost} XP. Benefit: +2 Max HP & Full Heal.`}
                 >
                     <ArrowUpCircle size={10} />
-                    <span>UP ({levelUpCost} XP)</span>
+                    <span>UP ({levelUpCost})</span>
                 </button>
             </div>
           </div>
         </div>
         
         <div className="space-y-1">
-          <StatRow label="Might" value={player.stats.might} buff={player.activeBuffs.might} icon={<Shield size={14} />} statKey="might" xp={player.resources.xp} onLevelUp={onLevelUp} baseCost={settings.xpBaseCost} />
-          <StatRow label="Agility" value={player.stats.agility} buff={player.activeBuffs.agility} icon={<Zap size={14} />} statKey="agility" xp={player.resources.xp} onLevelUp={onLevelUp} baseCost={settings.xpBaseCost} />
-          <StatRow label="Wisdom" value={player.stats.wisdom} buff={player.activeBuffs.wisdom} icon={<Scroll size={14} />} statKey="wisdom" xp={player.resources.xp} onLevelUp={onLevelUp} baseCost={settings.xpBaseCost} />
-          <StatRow label="Spirit" value={player.stats.spirit} buff={player.activeBuffs.spirit} icon={<Brain size={14} />} statKey="spirit" xp={player.resources.xp} onLevelUp={onLevelUp} baseCost={settings.xpBaseCost} />
+          <StatRow 
+            label="Might" 
+            description="Adds to roll when Training (XP) or fighting in the Deep Dungeon."
+            value={player.stats.might} 
+            buff={player.activeBuffs.might} 
+            icon={<Shield size={14} />} 
+            statKey="might" 
+            xp={player.resources.xp} 
+            onLevelUp={onLevelUp} 
+            baseCost={settings.xpBaseCost} 
+          />
+          <StatRow 
+            label="Agility" 
+            description="Adds to roll when Looting (Gold) or navigating the Capital City."
+            value={player.stats.agility} 
+            buff={player.activeBuffs.agility} 
+            icon={<Zap size={14} />} 
+            statKey="agility" 
+            xp={player.resources.xp} 
+            onLevelUp={onLevelUp} 
+            baseCost={settings.xpBaseCost} 
+          />
+          <StatRow 
+            label="Wisdom" 
+            description="Adds to roll when Studying (Mana) or exploring the Mage Tower."
+            value={player.stats.wisdom} 
+            buff={player.activeBuffs.wisdom} 
+            icon={<Scroll size={14} />} 
+            statKey="wisdom" 
+            xp={player.resources.xp} 
+            onLevelUp={onLevelUp} 
+            baseCost={settings.xpBaseCost} 
+          />
+          <StatRow 
+            label="Spirit" 
+            description="Adds to roll when Resting (Health) or traversing the Whispering Forest."
+            value={player.stats.spirit} 
+            buff={player.activeBuffs.spirit} 
+            icon={<Brain size={14} />} 
+            statKey="spirit" 
+            xp={player.resources.xp} 
+            onLevelUp={onLevelUp} 
+            baseCost={settings.xpBaseCost} 
+          />
         </div>
 
         {/* Alignment Meter */}
@@ -266,16 +334,27 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
            </div>
         </div>
 
-        {/* Middle Tools: Shop & Mana Actions */}
+        {/* Middle Tools: Shop, Quests & Mana Actions */}
         <div className="flex flex-col sm:flex-row gap-4">
              <button 
-                onClick={() => { playSFX('click'); setShowShop(!showShop); }}
+                onClick={() => { playSFX('click'); setShowShop(!showShop); setShowQuests(false); }}
                 className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition-all font-bold uppercase text-xs tracking-wider
                     ${showShop ? 'bg-yellow-900/20 border-yellow-600 text-yellow-500' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'}
                 `}
              >
                 <ShoppingBag size={16} />
                 {showShop ? 'Close Shop' : 'Merchant'}
+             </button>
+
+             <button 
+                onClick={() => { playSFX('click'); setShowQuests(!showQuests); setShowShop(false); }}
+                className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition-all font-bold uppercase text-xs tracking-wider
+                    ${showQuests ? 'bg-emerald-900/20 border-emerald-600 text-emerald-500' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'}
+                `}
+             >
+                <ScrollText size={16} />
+                {showQuests ? 'Close Quests' : 'Quests'}
+                {player.quests.some(q => q.isCompleted) && <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>}
              </button>
 
              <button 
@@ -337,6 +416,9 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
             </div>
         )}
 
+        {/* Quests Overlay Area */}
+        {showQuests && <QuestLog player={player} />}
+
         {/* Action Selection Area */}
         <div className="bg-black/40 rounded-lg border border-zinc-800/50 p-4 flex-1 flex flex-col justify-center shadow-inner">
             <h3 className="text-xs font-bold text-zinc-500 mb-3 flex justify-between uppercase tracking-widest">
@@ -362,7 +444,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                   disabled={selectedCards.length === 0 || !canAfford}
                   onClick={() => onSelfAction('rest')}
                   manaCost={manaCost}
-                  tooltip="Base: 2 HP. +1 per 5 Margin."
+                  tooltip={`Rest to recover health.\n• Base: Heal 2 HP\n• Crit: +1 HP for every 5 margin\n• Suit Bonus (Hearts): +1 HP`}
                />
                <ActionButton 
                   label="TRAIN" 
@@ -372,7 +454,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                   disabled={selectedCards.length === 0 || !canAfford}
                   onClick={() => onSelfAction('train')}
                   manaCost={manaCost}
-                   tooltip="Base: 1 XP. +1 per 8 Margin."
+                  tooltip={`Train to gain experience.\n• Base: Gain 1 XP\n• Crit: +1 XP for every 8 margin\n• Suit Bonus (Clubs): +1 XP`}
                />
                <ActionButton 
                   label="LOOT" 
@@ -382,7 +464,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                   disabled={selectedCards.length === 0 || !canAfford}
                   onClick={() => onSelfAction('loot')}
                   manaCost={manaCost}
-                   tooltip="Base: 1 Gold. +1 per 4 Margin."
+                  tooltip={`Loot to find gold.\n• Base: Gain 1 Gold\n• Crit: +1 Gold for every 4 margin\n• Suit Bonus (Spades): +1 Gold`}
                />
                <ActionButton 
                   label="STUDY" 
@@ -392,7 +474,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                   disabled={selectedCards.length === 0 || !canAfford}
                   onClick={() => onSelfAction('study')}
                   manaCost={manaCost}
-                   tooltip="Base: 1 Mana. +1 per 4 Margin."
+                  tooltip={`Study to gather mana.\n• Base: Gain 1 Mana\n• Crit: +1 Mana for every 4 margin\n• Suit Bonus (Diamonds): +1 Mana`}
                />
             </div>
             
@@ -406,7 +488,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                     disabled={false} // Always available
                     onClick={() => onSelfAction('dark_pact')}
                     manaCost={0}
-                    tooltip={`Sacrifice goodness for power. Alignment -3.`}
+                    tooltip={`Make a pact with darkness.\n• Effect: Gain 5 Mana instantly\n• Cost: Shift -3 Alignment (Evil)\n• No card flip required`}
                     variant="evil"
                 />
                 <ActionButton
@@ -417,7 +499,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, selectedCards
                     disabled={player.resources.mana < 2}
                     onClick={() => onSelfAction('purify')}
                     manaCost={2}
-                    tooltip={`Spend 2 Mana to cleanse the soul. Alignment +2.`}
+                    tooltip={`Cleanse your spirit.\n• Effect: Heal 3 HP & Shift +2 Alignment (Good)\n• Cost: 2 Mana\n• No card flip required`}
                     variant="good"
                 />
             </div>
