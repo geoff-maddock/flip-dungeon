@@ -54,6 +54,7 @@ export const ADVENTURE_LOCATIONS: AdventureLocation[] = [
     name: 'Whispering Forest', 
     description: 'A dense thicket teeming with life and branching paths.', 
     lootDescription: 'Success: Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP & Double Move.',
+    completionReward: { type: 'stat_permanent', value: 2, target: 'spirit', description: 'Permanent +2 Spirit', icon: 'leaf' },
     encounters: [
         { id: 'f1', name: 'Edge of Woods', modifier: null },
         { 
@@ -89,6 +90,7 @@ export const ADVENTURE_LOCATIONS: AdventureLocation[] = [
     name: 'Deep Dungeon', 
     description: 'Dark corridors filled with ancient treasure.', 
     lootDescription: 'Success: Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP & Double Move.',
+    completionReward: { type: 'item', value: 1, target: 'Dragon Slayer Sword', description: 'Weapon: Dragon Slayer', icon: 'sword' },
     encounters: [
         { id: 'd1', name: 'Rusty Gate', modifier: null },
         { id: 'd2', name: 'Guard Room', modifier: { type: 'difficulty', value: 2, name: 'Orc Guard', description: '+2 Difficulty', icon: 'shield-alert' } },
@@ -107,6 +109,7 @@ export const ADVENTURE_LOCATIONS: AdventureLocation[] = [
     name: 'Mage Tower', 
     description: 'Arcane libraries and magical anomalies.', 
     lootDescription: 'Success: Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP & Double Move.',
+    completionReward: { type: 'mana', value: 10, description: 'Gain 10 Mana', icon: 'sparkles' },
     encounters: [
         { id: 't1', name: 'Lobby', modifier: null },
         { id: 't2', name: 'Spiral Stairs', modifier: { type: 'max_cards', value: 3, name: 'Narrow Steps', description: 'Max 3 Cards', icon: 'minimize' } },
@@ -125,6 +128,7 @@ export const ADVENTURE_LOCATIONS: AdventureLocation[] = [
     name: 'Capital City', 
     description: 'Bustling streets of commerce and intrigue.', 
     lootDescription: 'Success: Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP & Double Move.',
+    completionReward: { type: 'gold', value: 15, description: 'Heist Loot: 15 Gold', icon: 'coins' },
     encounters: [
         { id: 'c1', name: 'City Gates', modifier: null },
         { id: 'c2', name: 'Marketplace', modifier: null },

@@ -80,6 +80,7 @@ export interface PlayerState {
   quests: Quest[];
   locationsCleared: number;
   damageTaken: number; // Tracked for specific quests
+  extraTurnsBought: number; // Tracks cost scaling for Time Warp
 }
 
 export type GamePhase = 'setup' | 'playing' | 'resolving' | 'round_end' | 'game_over';
@@ -117,11 +118,20 @@ export interface Encounter {
   branch?: Branch; // If present, this encounter offers a branching path on completion
 }
 
+export interface Reward {
+    type: 'gold' | 'xp' | 'mana' | 'item' | 'stat_permanent';
+    value: number;
+    target?: string; // e.g., 'might' or item name
+    description: string;
+    icon?: string;
+}
+
 export interface AdventureLocation {
   id: string;
   name: string;
   description: string;
   lootDescription: string;
+  completionReward: Reward;
   encounters: Encounter[]; // The sequence of steps
   currentEncounterIndex: number;
   rewards: string[];

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { PlayerState, Card, StatAttribute, GameSettings } from '../types';
-import { Heart, Coins, Star, Sparkles, User, Shield, Zap, Scroll, Brain, Trophy, Map as MapIcon, Crosshair, Gem, ArrowUpCircle, ShoppingBag, RefreshCw, Skull, Sun, Trash2, ScrollText } from 'lucide-react';
+import { Heart, Coins, Star, Sparkles, User, Shield, Zap, Scroll, Brain, Trophy, Map as MapIcon, Crosshair, Gem, ArrowUpCircle, ShoppingBag, RefreshCw, Skull, Sun, Trash2, ScrollText, Wand2, Book, Clock } from 'lucide-react';
 import { getSuitSymbol } from '../utils/deck';
 import { playSFX } from '../utils/sound';
 import QuestLog from './QuestLog';
@@ -10,7 +10,7 @@ interface PlayerDashboardProps {
   player: PlayerState;
   characterImage?: string;
   selectedCards: Card[];
-  onSelfAction: (actionType: 'rest' | 'train' | 'loot' | 'study' | 'dark_pact' | 'purify') => void;
+  onSelfAction: (actionType: 'rest' | 'train' | 'loot' | 'study' | 'dark_pact' | 'purify' | 'time_warp') => void;
   onLevelUp: (stat: StatAttribute | 'PLAYER_LEVEL') => void;
   onBuyItem: (item: string, cost: number, statBuff?: StatAttribute, amount?: number) => void;
   onMulligan: () => void;
@@ -154,14 +154,59 @@ const ActionButton = ({
             -{manaCost} Mana
         </div>
     )}
-    
-    {/* Tooltip trigger helper (visual only, actual tooltip is on button title for now) */}
   </button>
+);
+
+const SpellButton = ({
+    label,
+    description,
+    cost,
+    icon,
+    onClick,
+    disabled,
+    color = 'text-blue-400',
+    borderColor = 'border-blue-800'
+}: {
+    label: string;
+    description: string;
+    cost: number;
+    icon: React.ReactNode;
+    onClick: () => void;
+    disabled: boolean;
+    color?: string;
+    borderColor?: string;
+}) => (
+    <button
+        onClick={onClick}
+        disabled={disabled}
+        className={`
+            relative flex flex-col items-start p-3 rounded-lg border transition-all w-full text-left
+            ${disabled 
+                ? 'bg-zinc-900/50 border-zinc-800 opacity-50 cursor-not-allowed' 
+                : `bg-zinc-900/80 ${borderColor} hover:bg-zinc-800 hover:shadow-[0_0_15px_rgba(0,0,0,0.5)]`
+            }
+        `}
+    >
+        <div className="flex justify-between w-full mb-1">
+            <div className={`font-bold flex items-center gap-2 ${disabled ? 'text-zinc-500' : color}`}>
+                {icon}
+                <span>{label}</span>
+            </div>
+            {cost > 0 && (
+                <span className={`text-xs font-mono font-bold ${disabled ? 'text-zinc-600' : 'text-blue-300'}`}>
+                    {cost} Mana
+                </span>
+            )}
+        </div>
+        <p className="text-[10px] text-zinc-500 leading-tight">{description}</p>
+    </button>
 );
 
 const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImage, selectedCards, onSelfAction, onLevelUp, onBuyItem, onMulligan, onDiscardHand, settings }) => {
   const [showShop, setShowShop] = useState(false);
   const [showQuests, setShowQuests] = useState(false);
+  const [showSpellbook, setShowSpellbook] = useState(false);
+
   const manaCost = Math.max(0, (selectedCards.length - 1) * settings.manaCostPerExtraCard);
   const canAfford = player.resources.mana >= manaCost;
 
@@ -174,6 +219,9 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
   const alignmentPercent = ((player.alignment - settings.alignmentMin) / range) * 100;
   const isEvil = player.alignment <= settings.evilThreshold;
   const isGood = player.alignment >= settings.goodThreshold;
+
+  // Time Warp Cost
+  const timeWarpCost = player.extraTurnsBought + 1;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-zinc-950/80 backdrop-blur-md p-4 md:p-6 rounded-xl shadow-2xl border border-zinc-800/50">
@@ -334,10 +382,10 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
            </div>
         </div>
 
-        {/* Middle Tools: Shop, Quests & Mana Actions */}
+        {/* Middle Tools: Shop, Quests & Spellbook */}
         <div className="flex flex-col sm:flex-row gap-4">
              <button 
-                onClick={() => { playSFX('click'); setShowShop(!showShop); setShowQuests(false); }}
+                onClick={() => { playSFX('click'); setShowShop(!showShop); setShowQuests(false); setShowSpellbook(false); }}
                 className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition-all font-bold uppercase text-xs tracking-wider
                     ${showShop ? 'bg-yellow-900/20 border-yellow-600 text-yellow-500' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'}
                 `}
@@ -347,7 +395,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
              </button>
 
              <button 
-                onClick={() => { playSFX('click'); setShowQuests(!showQuests); setShowShop(false); }}
+                onClick={() => { playSFX('click'); setShowQuests(!showQuests); setShowShop(false); setShowSpellbook(false); }}
                 className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition-all font-bold uppercase text-xs tracking-wider
                     ${showQuests ? 'bg-emerald-900/20 border-emerald-600 text-emerald-500' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'}
                 `}
@@ -358,32 +406,14 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
              </button>
 
              <button 
-                onClick={onMulligan}
-                disabled={selectedCards.length !== 1 || player.resources.mana < 1}
+                onClick={() => { playSFX('click'); setShowSpellbook(!showSpellbook); setShowShop(false); setShowQuests(false); }}
                 className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition-all font-bold uppercase text-xs tracking-wider
-                    ${selectedCards.length !== 1 || player.resources.mana < 1
-                         ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed' 
-                         : 'bg-blue-900/20 border-blue-800 text-blue-400 hover:bg-blue-900/40'}
+                    ${showSpellbook ? 'bg-blue-900/20 border-blue-600 text-blue-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'}
                 `}
-                title="Spend 1 Mana to discard 1 selected card and draw a new one"
              >
-                <RefreshCw size={16} />
-                Transmute (1 Mana)
+                <Book size={16} />
+                {showSpellbook ? 'Close Spellbook' : 'Spellbook'}
              </button>
-
-             <button
-                onClick={onDiscardHand}
-                disabled={player.resources.mana < 1}
-                className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition-all font-bold uppercase text-xs tracking-wider
-                    ${player.resources.mana < 1
-                         ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                         : 'bg-red-900/20 border-red-800 text-red-400 hover:bg-red-900/40'}
-                `}
-                title="Spend 1 Mana to discard your entire hand and draw 5 new cards"
-            >
-                <Trash2 size={16} />
-                Discard Hand (1 Mana)
-            </button>
         </div>
 
         {/* Shop Overlay Area */}
@@ -419,6 +449,61 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
         {/* Quests Overlay Area */}
         {showQuests && <QuestLog player={player} />}
 
+        {/* Spellbook Overlay Area */}
+        {showSpellbook && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 bg-zinc-950 p-4 rounded-lg border border-blue-900/30 animate-in slide-in-from-top-2">
+                <SpellButton
+                    label="Transmute"
+                    description="Discard 1 selected card to draw a new one."
+                    cost={1}
+                    icon={<RefreshCw size={16} />}
+                    onClick={onMulligan}
+                    disabled={selectedCards.length !== 1 || player.resources.mana < 1}
+                    borderColor="border-blue-800"
+                />
+                <SpellButton
+                    label="Discard Hand"
+                    description="Discard all cards and draw 5 new ones."
+                    cost={1}
+                    icon={<Trash2 size={16} />}
+                    onClick={onDiscardHand}
+                    disabled={player.resources.mana < 1}
+                    color="text-red-400"
+                    borderColor="border-red-800"
+                />
+                <SpellButton
+                    label="Dark Pact"
+                    description="Gain 5 Mana, Shift Alignment towards Evil (-3)."
+                    cost={0}
+                    icon={<Skull size={16} />}
+                    onClick={() => onSelfAction('dark_pact')}
+                    disabled={false}
+                    color="text-red-500"
+                    borderColor="border-red-900"
+                />
+                <SpellButton
+                    label="Purify"
+                    description="Heal 3 HP, Shift Alignment towards Good (+2)."
+                    cost={2}
+                    icon={<Sun size={16} />}
+                    onClick={() => onSelfAction('purify')}
+                    disabled={player.resources.mana < 2}
+                    color="text-indigo-400"
+                    borderColor="border-indigo-800"
+                />
+                <SpellButton
+                    label="Time Warp"
+                    description="Bend time to gain 1 additional Action this round."
+                    cost={timeWarpCost}
+                    icon={<Clock size={16} />}
+                    onClick={() => onSelfAction('time_warp')}
+                    disabled={player.resources.mana < timeWarpCost}
+                    color="text-purple-400"
+                    borderColor="border-purple-800"
+                />
+            </div>
+        )}
+
         {/* Action Selection Area */}
         <div className="bg-black/40 rounded-lg border border-zinc-800/50 p-4 flex-1 flex flex-col justify-center shadow-inner">
             <h3 className="text-xs font-bold text-zinc-500 mb-3 flex justify-between uppercase tracking-widest">
@@ -435,7 +520,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
                   <span className="text-zinc-700">Select cards from hand for basic actions</span>
                )}
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                <ActionButton 
                   label="REST" 
                   subtext="Heal HP (Spirit)" 
@@ -476,32 +561,6 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
                   manaCost={manaCost}
                   tooltip={`Study to gather mana.\n• Base: Gain 1 Mana\n• Crit: +1 Mana for every 4 margin\n• Suit Bonus (Diamonds): +1 Mana`}
                />
-            </div>
-            
-            {/* Alignment Actions */}
-            <div className="grid grid-cols-2 gap-3 border-t border-zinc-800/50 pt-4">
-                <ActionButton
-                    label="DARK PACT"
-                    subtext="Gain 5 Mana, Shift Evil"
-                    icon={<Skull size={16} />}
-                    suit={undefined}
-                    disabled={false} // Always available
-                    onClick={() => onSelfAction('dark_pact')}
-                    manaCost={0}
-                    tooltip={`Make a pact with darkness.\n• Effect: Gain 5 Mana instantly\n• Cost: Shift -3 Alignment (Evil)\n• No card flip required`}
-                    variant="evil"
-                />
-                <ActionButton
-                    label="PURIFY"
-                    subtext="Heal 3 HP, Shift Good"
-                    icon={<Sun size={16} />}
-                    suit={undefined}
-                    disabled={player.resources.mana < 2}
-                    onClick={() => onSelfAction('purify')}
-                    manaCost={2}
-                    tooltip={`Cleanse your spirit.\n• Effect: Heal 3 HP & Shift +2 Alignment (Good)\n• Cost: 2 Mana\n• No card flip required`}
-                    variant="good"
-                />
             </div>
         </div>
       </div>

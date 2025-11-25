@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { AdventureLocation, Card, NodeModifier } from '../types';
-import { Map, Castle, Trees, Mountain, Tent, Sword, ShieldAlert, EyeOff, Minimize, Info, Gift, Compass, Flag, PlusCircle, Split } from 'lucide-react';
+import { AdventureLocation, Card, NodeModifier, Reward } from '../types';
+import { Map, Castle, Trees, Mountain, Tent, Sword, ShieldAlert, EyeOff, Minimize, Info, Gift, Compass, Flag, PlusCircle, Split, Crown, Coins, Star, Zap, Sparkles } from 'lucide-react';
 import { getSuitSymbol } from '../utils/deck';
 
 interface AdventureBoardProps {
@@ -31,9 +31,25 @@ const LocationIcon = ({ icon, id }: { icon?: string; id: string }) => {
     case 'city': return <Tent className="w-5 h-5" />;
     case 'flag': return <Flag className="w-5 h-5" />;
     case 'compass': return <Compass className="w-5 h-5" />;
+    case 'sword': return <Sword className="w-5 h-5" />; 
+    case 'coins': return <Coins className="w-5 h-5" />;
+    case 'star': return <Star className="w-5 h-5" />;
+    case 'sparkles': return <Sparkles className="w-5 h-5" />;
+    case 'zap': return <Zap className="w-5 h-5" />;
     default: return <Map className="w-5 h-5" />;
   }
 };
+
+const RewardIcon = ({ type }: { type: Reward['type'] }) => {
+    switch(type) {
+        case 'gold': return <Coins className="w-4 h-4 text-yellow-500" />;
+        case 'xp': return <Star className="w-4 h-4 text-purple-500" />;
+        case 'mana': return <Sparkles className="w-4 h-4 text-blue-500" />;
+        case 'item': return <Crown className="w-4 h-4 text-orange-500" />;
+        case 'stat_permanent': return <Zap className="w-4 h-4 text-green-500" />;
+        default: return <Gift className="w-4 h-4 text-white" />;
+    }
+}
 
 const ModifierIcon = ({ mod }: { mod: NodeModifier }) => {
     switch(mod.type) {
@@ -67,6 +83,14 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
   const currentEncounter = currentLocation.encounters[currentIndex];
   const activeModifier = currentEncounter?.modifier;
   const isBlocked = activeModifier?.type === 'max_cards' && selectedCards.length > activeModifier.value;
+  
+  // Check branch prediction
+  let nextPathColor: 'red' | 'black' | null = null;
+  if (currentEncounter?.branch && selectedCards.length > 0) {
+      const firstCard = selectedCards[0];
+      if (['hearts', 'diamonds'].includes(firstCard.suit)) nextPathColor = 'red';
+      else nextPathColor = 'black';
+  }
 
   return (
     <div className="mt-6 bg-zinc-950/80 backdrop-blur-md rounded-xl border border-zinc-800/50 overflow-hidden flex flex-col md:flex-row min-h-[380px] shadow-2xl">
@@ -146,14 +170,6 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
                         <div className="text-xs text-zinc-500 italic">No active modifiers.</div>
                     )}
                     
-                    {/* Branching Warning */}
-                    {currentEncounter.branch && (
-                         <div className="mt-2 text-xs font-bold text-indigo-300 bg-indigo-900/20 px-2 py-1 rounded flex items-center gap-2 border border-indigo-500/30">
-                             <Split size={12} />
-                             {currentEncounter.branch.text}
-                         </div>
-                    )}
-
                     {/* Card Limit Warning */}
                     {isBlocked && (
                         <div className="mt-2 text-xs font-bold text-red-500 bg-red-900/20 px-2 py-1 rounded animate-pulse">
@@ -164,16 +180,47 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
             )}
         </div>
 
-        {/* Specific Loot Description */}
-        <div className="mb-6 bg-zinc-900/30 p-3 rounded border border-zinc-800/50 flex gap-3">
-            <div className="p-2 bg-zinc-800 rounded text-yellow-500 h-fit"><Gift size={16} /></div>
-            <div>
-                <div className="text-[10px] uppercase font-bold text-zinc-500 mb-1">Rewards</div>
-                <div className="text-xs text-zinc-300 whitespace-pre-line font-mono leading-relaxed">
-                    {currentLocation.lootDescription}
+        {/* Branch Visualization */}
+        {currentEncounter?.branch && currentIndex < totalEncounters && (
+            <div className="mb-6 bg-black/40 p-4 rounded-xl border border-indigo-900/30">
+                <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase mb-3">
+                    <Split size={14} /> Fork in the Road
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    {/* Red Path */}
+                    <div className={`
+                        p-3 rounded border transition-all relative overflow-hidden
+                        ${nextPathColor === 'red' ? 'bg-red-950/40 border-red-500 ring-1 ring-red-500' : 'bg-zinc-900/50 border-zinc-800'}
+                    `}>
+                        {nextPathColor === 'red' && <div className="absolute top-0 right-0 px-2 py-0.5 bg-red-600 text-[9px] font-bold text-white rounded-bl">SELECTED</div>}
+                        <div className="text-[10px] font-bold text-red-400 mb-1">RED PATH (Hearts/Diamonds)</div>
+                        <div className="font-bold text-sm text-zinc-200">{currentEncounter.branch.paths.red[0].name}</div>
+                        {currentEncounter.branch.paths.red[0].modifier && (
+                             <div className="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
+                                <ModifierIcon mod={currentEncounter.branch.paths.red[0].modifier} />
+                                {currentEncounter.branch.paths.red[0].modifier.name}
+                             </div>
+                        )}
+                    </div>
+
+                    {/* Black Path */}
+                    <div className={`
+                        p-3 rounded border transition-all relative overflow-hidden
+                        ${nextPathColor === 'black' ? 'bg-slate-950/40 border-slate-500 ring-1 ring-slate-500' : 'bg-zinc-900/50 border-zinc-800'}
+                    `}>
+                        {nextPathColor === 'black' && <div className="absolute top-0 right-0 px-2 py-0.5 bg-slate-600 text-[9px] font-bold text-white rounded-bl">SELECTED</div>}
+                        <div className="text-[10px] font-bold text-slate-400 mb-1">BLACK PATH (Clubs/Spades)</div>
+                        <div className="font-bold text-sm text-zinc-200">{currentEncounter.branch.paths.black[0].name}</div>
+                         {currentEncounter.branch.paths.black[0].modifier && (
+                             <div className="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
+                                <ModifierIcon mod={currentEncounter.branch.paths.black[0].modifier} />
+                                {currentEncounter.branch.paths.black[0].modifier.name}
+                             </div>
+                        )}
+                    </div>
                 </div>
             </div>
-        </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4 mb-6">
              <div className="bg-zinc-900/50 p-3 rounded border border-zinc-800/50">
@@ -210,7 +257,7 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
                 ) : (
                     <>
                         <Sword size={18} />
-                        <span>EXPLORE</span>
+                        <span>EXPLORE {nextPathColor ? (nextPathColor === 'red' ? '(Red Path)' : '(Black Path)') : ''}</span>
                     </>
                 )}
                 </button>
@@ -287,13 +334,24 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
                     );
                 })}
                 
-                {/* Goal */}
+                {/* Goal / Completion Loot */}
                 <div className="w-6 h-0.5 mb-4 bg-zinc-800" />
                 <div className={`
-                flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center border-2 rotate-45 ml-2 mb-4 shadow-lg
-                ${currentIndex >= totalEncounters ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500 shadow-yellow-500/20' : 'bg-zinc-900 border-zinc-800 text-zinc-700'}
+                    relative group flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center border-2 ml-2 mb-4 shadow-lg cursor-help transition-all
+                    ${currentIndex >= totalEncounters ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500 shadow-yellow-500/20 scale-110' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}
                 `}>
-                    <div className="-rotate-45 font-bold text-[9px]">LOOT</div>
+                    <RewardIcon type={currentLocation.completionReward.type} />
+                    
+                    {/* Loot Tooltip */}
+                    <div className="absolute bottom-full mb-2 right-0 w-52 bg-zinc-950 border border-yellow-700/50 p-3 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                        <div className="text-xs font-black text-yellow-500 uppercase mb-1 flex items-center gap-2">
+                             Completion Reward
+                        </div>
+                        <div className="text-sm font-bold text-white mb-1">{currentLocation.completionReward.description}</div>
+                        <div className="text-[10px] text-zinc-500 italic border-t border-zinc-800 pt-1 mt-1">
+                            Clear all encounters to claim this prize.
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -65,7 +65,8 @@ const App: React.FC = () => {
     alignment: 0,
     quests: [],
     locationsCleared: 0,
-    damageTaken: 0
+    damageTaken: 0,
+    extraTurnsBought: 0
   });
 
   // Load Settings from LocalStorage on mount
@@ -142,7 +143,8 @@ const App: React.FC = () => {
       alignment: 0,
       quests: generateQuests(4),
       locationsCleared: 0,
-      damageTaken: 0
+      damageTaken: 0,
+      extraTurnsBought: 0
     }));
     
     // Initialize Locations
@@ -195,7 +197,6 @@ const App: React.FC = () => {
             setPlayerDeck(newDeck.slice(needed));
         } else {
             // Emergency: New deck (if user burns through 52 cards without discarding?)
-            // Or if just start of game and logic requires it
             const emergencyDeck = shuffleDeck(createDeck());
             const additional = emergencyDeck.slice(0, needed);
             drawn = [...drawn, ...additional];
@@ -264,9 +265,14 @@ const App: React.FC = () => {
     let detailsLog = "";
     let damage = 0;
     
+    // Store reference to updated player state to return
+    let updatedPlayerState = { ...player };
+
     setPlayer(prev => {
       const newResources = { ...prev.resources };
       const newScoring = { ...prev.scoring };
+      const newItems = [...prev.items];
+      const newStats = { ...prev.stats };
       const newAlignment = prev.alignment;
       let locationsCleared = prev.locationsCleared;
       let damageTaken = prev.damageTaken;
@@ -359,13 +365,17 @@ const App: React.FC = () => {
         detailsLog = `Took ${damage} Dmg`;
       }
 
-      return { ...prev, resources: newResources, scoring: newScoring, alignment: newAlignment, locationsCleared, damageTaken };
+      updatedPlayerState = { ...prev, resources: newResources, scoring: newScoring, alignment: newAlignment, locationsCleared, damageTaken, items: newItems, stats: newStats };
+      return updatedPlayerState;
     });
 
     if (success && actionType.startsWith('explore:')) {
         const locId = actionType.split(':')[1];
         const progressAmount = margin >= 10 ? 2 : 1;
+        const location = locations.find(l => l.id === locId);
 
+        let completed = false;
+        
         setLocations(prev => prev.map(l => {
             if (l.id !== locId) return l;
 
@@ -390,8 +400,7 @@ const App: React.FC = () => {
 
             // Check if location cleared
             if (l.currentEncounterIndex < maxIndex && nextIndex >= maxIndex) {
-                setPlayer(p => ({ ...p, locationsCleared: p.locationsCleared + 1 }));
-                message += " Location Cleared!";
+                completed = true;
             }
 
             return { 
@@ -400,6 +409,39 @@ const App: React.FC = () => {
                 currentEncounterIndex: Math.min(maxIndex, nextIndex) 
             };
         }));
+
+        if (completed && location) {
+            // Apply Completion Reward
+            setPlayer(p => {
+                const r = { ...p.resources };
+                const s = { ...p.stats };
+                const i = [...p.items];
+                const reward = location.completionReward;
+                let rewardMsg = "";
+
+                if (reward.type === 'gold') {
+                    r.gold += reward.value;
+                    rewardMsg = `+${reward.value} Gold`;
+                } else if (reward.type === 'xp') {
+                    r.xp += reward.value;
+                    rewardMsg = `+${reward.value} XP`;
+                } else if (reward.type === 'mana') {
+                    r.mana += reward.value;
+                    rewardMsg = `+${reward.value} Mana`;
+                } else if (reward.type === 'item') {
+                    const itemName = reward.target || 'Treasure';
+                    i.push(itemName);
+                    rewardMsg = `Obtained ${itemName}`;
+                } else if (reward.type === 'stat_permanent' && reward.target) {
+                    s[reward.target as StatAttribute] = (s[reward.target as StatAttribute] || 0) + reward.value;
+                    rewardMsg = `+${reward.value} ${reward.target}`;
+                }
+
+                message += ` LOCATION CLEARED! Reward: ${rewardMsg}`;
+                return { ...p, resources: r, stats: s, items: i, locationsCleared: p.locationsCleared + 1 };
+            });
+            playSFX('level_up');
+        }
     }
 
     const pendingRecord: TurnRecord = {
@@ -429,8 +471,8 @@ const App: React.FC = () => {
   };
 
   const handleAction = (type: 'self' | 'location', target: string) => {
-    // Special Alignment Actions
-    if (type === 'self' && (target === 'dark_pact' || target === 'purify')) {
+    // Special Spellbook Actions
+    if (type === 'self') {
         if (target === 'dark_pact') {
              playSFX('evil');
              setPlayer(prev => ({
@@ -452,6 +494,19 @@ const App: React.FC = () => {
                  },
                  alignment: Math.min(settings.alignmentMax, prev.alignment + 2)
              }));
+             return;
+        }
+        if (target === 'time_warp') {
+             const cost = player.extraTurnsBought + 1;
+             if (player.resources.mana < cost) return;
+             playSFX('magic');
+             setPlayer(prev => ({
+                 ...prev,
+                 resources: { ...prev.resources, mana: prev.resources.mana - cost },
+                 extraTurnsBought: prev.extraTurnsBought + 1
+             }));
+             // Decrementing turn effectively adds a turn to the current round
+             setTurn(t => Math.max(0, t - 1));
              return;
         }
     }

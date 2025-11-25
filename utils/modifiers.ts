@@ -1,5 +1,5 @@
 
-import { NodeModifier, Suit, AdventureLocation, StatAttribute, Encounter } from '../types';
+import { NodeModifier, Suit, AdventureLocation, StatAttribute, Encounter, Reward } from '../types';
 
 const SUITS: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
 const STATS: StatAttribute[] = ['might', 'agility', 'wisdom', 'spirit'];
@@ -77,6 +77,19 @@ export const generateEncounters = (count: number, difficultyScalar: number, type
     return encounters;
 };
 
+const generateRandomReward = (round: number, stat: StatAttribute): Reward => {
+    const roll = Math.random();
+    if (roll < 0.25) {
+        return { type: 'gold', value: 10 + (round * 5), description: `${10 + (round * 5)} Gold`, icon: 'coins' };
+    } else if (roll < 0.5) {
+        return { type: 'xp', value: 5 + (round * 2), description: `${5 + (round * 2)} XP`, icon: 'star' };
+    } else if (roll < 0.75) {
+        return { type: 'stat_permanent', value: 1, target: stat, description: `Permanent +1 ${stat.charAt(0).toUpperCase() + stat.slice(1)}`, icon: 'zap' };
+    } else {
+        return { type: 'mana', value: 5 + (round * 3), description: `${5 + (round * 3)} Mana`, icon: 'sparkles' };
+    }
+};
+
 // Generators for Random Locations
 const ADJECTIVES = ['Ancient', 'Forgotten', 'Cursed', 'Hallowed', 'Misty', 'Burning', 'Frozen', 'Shadow', 'Golden', 'Crystal', 'Silent', 'Whispering'];
 const NOUNS = ['Ruins', 'Caverns', 'Peaks', 'Shrine', 'Depths', 'Sanctuary', 'Wasteland', 'Crypt', 'Grove', 'Citadel', 'Nexus', 'Tomb'];
@@ -95,12 +108,14 @@ export const generateRandomLocation = (round: number): AdventureLocation => {
   const icon = ICONS[Math.floor(Math.random() * ICONS.length)];
 
   const encounters = generateEncounters(nodeCount, round * 2, name);
+  const completionReward = generateRandomReward(round, stat);
 
   return {
     id,
     name,
     description: `A ${adj.toLowerCase()} place of power. Test your ${stat} here.`,
     lootDescription: 'Success: Progress.\nCrit (Margin 5+): +1 Gold.\nCrit (Margin 10+): +1 XP & Double Move.',
+    completionReward,
     encounters,
     currentEncounterIndex: 0,
     rewards: ['Random Loot'],
