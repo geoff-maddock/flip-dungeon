@@ -788,7 +788,8 @@ const App: React.FC = () => {
     const outcome = player.resources.health > 0 ? 'Victory' : 'Defeat';
     
     const base64Audio = await generateAdventureStorySpeech(
-        player.class,
+        player,
+        gameHistory,
         outcome,
         score,
         round,

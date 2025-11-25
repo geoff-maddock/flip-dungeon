@@ -1,5 +1,6 @@
 
 import { GoogleGenAI, Modality } from "@google/genai";
+import { PlayerState, TurnRecord, Difficulty } from '../types';
 
 export const generateClassIcon = async (className: string, description: string): Promise<string | null> => {
   try {
@@ -33,26 +34,37 @@ export const generateClassIcon = async (className: string, description: string):
 };
 
 export const generateAdventureStorySpeech = async (
-  characterClass: string,
+  player: PlayerState,
+  history: TurnRecord[],
   outcome: 'Victory' | 'Defeat',
   score: number,
   round: number,
-  difficulty: string
+  difficulty: Difficulty
 ): Promise<string | null> => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
+    // Analyze History for Flavor
+    const locationsVisited = [...new Set(history.filter(h => h.actionName.startsWith('Explore')).map(h => h.actionName.replace('Explore ', '')))];
+    const bestStatEntry = Object.entries(player.stats).filter(([k]) => k !== 'level').reduce((a, b) => a[1] > b[1] ? a : b, ['Balanced', 0]);
+    const bestStat = bestStatEntry[0];
+    const deathCause = outcome === 'Defeat' ? history[history.length - 1]?.details : '';
+    
     const prompt = `
       You are an old tavern storyteller recounting a legend. 
-      Narrate a very short, dramatic summary (max 3 sentences) of a ${characterClass} who ventured into the Flip Dungeon.
+      Narrate a dramatic, flavorful summary (max 3-4 sentences) of a Level ${player.stats.level} ${player.class} who ventured into the Flip Dungeon.
       
-      Details:
-      - Outcome: ${outcome} (Make it heroic if Victory, tragic but hopeful if Defeat)
-      - Difficulty: ${difficulty}
-      - They lasted ${round} rounds and achieved a score of ${score}.
+      Weave these details into the story naturally:
+      - Defining Trait: Known for their high ${bestStat}.
+      - Journey: They traveled through ${locationsVisited.length > 0 ? locationsVisited.join(', ') : 'the entrance'}.
+      - Achievements: Cleared ${player.locationsCleared} locations.
+      - Fate: ${outcome} on Round ${round} (${difficulty} difficulty).
+      - Ending: ${outcome === 'Defeat' ? `Fell to: ${deathCause}` : 'Retired a wealthy legend.'}
+      - Alignment: ${player.alignment < -3 ? 'A corrupted soul.' : player.alignment > 3 ? 'A beacon of virtue.' : 'A pragmatic mercenary.'}
       
-      Style: Epic, atmospheric, fantasy narration.
-      Do not include any intro like "Here is the story". Just start the story.
+      Style: Epic, atmospheric, dark fantasy. 
+      Do not list numbers or stats directly like a report. Tell it as a myth.
+      Do not include an intro like "Here is the story". Start directly with the narration.
     `;
 
     const response = await ai.models.generateContent({
@@ -64,7 +76,7 @@ export const generateAdventureStorySpeech = async (
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' } // Deep, storytelling voice
+            prebuiltVoiceConfig: { voiceName: 'Fenrir' } // Fenrir: Deeper, more intense for dark fantasy
           }
         }
       }

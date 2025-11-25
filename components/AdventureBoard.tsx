@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AdventureLocation, Card, NodeModifier, Reward } from '../types';
-import { Map, Castle, Trees, Mountain, Tent, Sword, ShieldAlert, EyeOff, Minimize, Info, Gift, Compass, Flag, PlusCircle, Split, Crown, Coins, Star, Zap, Sparkles } from 'lucide-react';
+import { Map, Castle, Trees, Mountain, Tent, Sword, ShieldAlert, EyeOff, Minimize, Info, Gift, Compass, Flag, PlusCircle, Split, Crown, Coins, Star, Zap, Sparkles, Leaf, Shield } from 'lucide-react';
 import { getSuitSymbol } from '../utils/deck';
 
 interface AdventureBoardProps {
@@ -40,14 +40,29 @@ const LocationIcon = ({ icon, id }: { icon?: string; id: string }) => {
   }
 };
 
-const RewardIcon = ({ type }: { type: Reward['type'] }) => {
-    switch(type) {
-        case 'gold': return <Coins className="w-4 h-4 text-yellow-500" />;
-        case 'xp': return <Star className="w-4 h-4 text-purple-500" />;
-        case 'mana': return <Sparkles className="w-4 h-4 text-blue-500" />;
-        case 'item': return <Crown className="w-4 h-4 text-orange-500" />;
-        case 'stat_permanent': return <Zap className="w-4 h-4 text-green-500" />;
-        default: return <Gift className="w-4 h-4 text-white" />;
+const RewardIcon = ({ reward }: { reward: Reward }) => {
+    // Check specific icon override first
+    if (reward.icon) {
+         switch(reward.icon) {
+             case 'leaf': return <Leaf className="w-5 h-5 text-green-500" />;
+             case 'sword': return <Sword className="w-5 h-5 text-orange-500" />;
+             case 'shield': return <Shield className="w-5 h-5 text-zinc-400" />;
+             case 'coins': return <Coins className="w-5 h-5 text-yellow-500" />;
+             case 'sparkles': return <Sparkles className="w-5 h-5 text-blue-500" />;
+             case 'star': return <Star className="w-5 h-5 text-purple-500" />;
+             case 'zap': return <Zap className="w-5 h-5 text-green-500" />;
+             case 'crown': return <Crown className="w-5 h-5 text-orange-500" />;
+         }
+    }
+    
+    // Fallback to type
+    switch(reward.type) {
+        case 'gold': return <Coins className="w-5 h-5 text-yellow-500" />;
+        case 'xp': return <Star className="w-5 h-5 text-purple-500" />;
+        case 'mana': return <Sparkles className="w-5 h-5 text-blue-500" />;
+        case 'item': return <Crown className="w-5 h-5 text-orange-500" />;
+        case 'stat_permanent': return <Zap className="w-5 h-5 text-green-500" />;
+        default: return <Gift className="w-5 h-5 text-white" />;
     }
 }
 
@@ -62,6 +77,7 @@ const ModifierIcon = ({ mod }: { mod: NodeModifier }) => {
 
 const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCards, playerMana, playerXp, onLocationAction, onExploreNewLand }) => {
   const [activeTab, setActiveTab] = useState(locations[0].id);
+  const [hoveredReward, setHoveredReward] = useState<Reward | null>(null);
   
   useEffect(() => {
     if (!locations.find(l => l.id === activeTab) && locations.length > 0) {
@@ -184,17 +200,21 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
         {currentEncounter?.branch && currentIndex < totalEncounters && (
             <div className="mb-6 bg-black/40 p-4 rounded-xl border border-indigo-900/30">
                 <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase mb-3">
-                    <Split size={14} /> Fork in the Road
+                    <Split size={14} /> Fork in the Road - Choose Your Path
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                     {/* Red Path */}
                     <div className={`
-                        p-3 rounded border transition-all relative overflow-hidden
+                        p-3 rounded border transition-all relative overflow-hidden group
                         ${nextPathColor === 'red' ? 'bg-red-950/40 border-red-500 ring-1 ring-red-500' : 'bg-zinc-900/50 border-zinc-800'}
                     `}>
                         {nextPathColor === 'red' && <div className="absolute top-0 right-0 px-2 py-0.5 bg-red-600 text-[9px] font-bold text-white rounded-bl">SELECTED</div>}
-                        <div className="text-[10px] font-bold text-red-400 mb-1">RED PATH (Hearts/Diamonds)</div>
-                        <div className="font-bold text-sm text-zinc-200">{currentEncounter.branch.paths.red[0].name}</div>
+                        <div className="text-[10px] font-bold text-red-400 mb-1 uppercase tracking-widest">High Road</div>
+                        <div className="flex items-center gap-2 text-xs text-zinc-400 mb-2">
+                            <span>Requires:</span>
+                            <span className="text-red-500 font-bold flex items-center"><CardSuitIcon suit="hearts"/> <CardSuitIcon suit="diamonds"/></span>
+                        </div>
+                        <div className="font-bold text-sm text-zinc-200 border-t border-white/5 pt-2">{currentEncounter.branch.paths.red[0].name}</div>
                         {currentEncounter.branch.paths.red[0].modifier && (
                              <div className="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
                                 <ModifierIcon mod={currentEncounter.branch.paths.red[0].modifier} />
@@ -205,12 +225,16 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
 
                     {/* Black Path */}
                     <div className={`
-                        p-3 rounded border transition-all relative overflow-hidden
+                        p-3 rounded border transition-all relative overflow-hidden group
                         ${nextPathColor === 'black' ? 'bg-slate-950/40 border-slate-500 ring-1 ring-slate-500' : 'bg-zinc-900/50 border-zinc-800'}
                     `}>
                         {nextPathColor === 'black' && <div className="absolute top-0 right-0 px-2 py-0.5 bg-slate-600 text-[9px] font-bold text-white rounded-bl">SELECTED</div>}
-                        <div className="text-[10px] font-bold text-slate-400 mb-1">BLACK PATH (Clubs/Spades)</div>
-                        <div className="font-bold text-sm text-zinc-200">{currentEncounter.branch.paths.black[0].name}</div>
+                        <div className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">Low Road</div>
+                         <div className="flex items-center gap-2 text-xs text-zinc-400 mb-2">
+                            <span>Requires:</span>
+                            <span className="text-slate-400 font-bold flex items-center"><CardSuitIcon suit="spades"/> <CardSuitIcon suit="clubs"/></span>
+                        </div>
+                        <div className="font-bold text-sm text-zinc-200 border-t border-white/5 pt-2">{currentEncounter.branch.paths.black[0].name}</div>
                          {currentEncounter.branch.paths.black[0].modifier && (
                              <div className="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
                                 <ModifierIcon mod={currentEncounter.branch.paths.black[0].modifier} />
@@ -272,7 +296,7 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
         {/* Progress Track (Encounters) */}
         <div className="mt-auto">
             <div className="text-xs font-black text-zinc-600 uppercase mb-3 tracking-widest">Path Ahead</div>
-            <div className="flex items-center gap-3 overflow-x-auto pb-4 scrollbar-thin">
+            <div className="flex items-center gap-3 overflow-x-auto pb-4 scrollbar-thin relative">
                 {currentLocation.encounters.map((encounter, idx) => {
                     const isCompleted = idx < currentIndex;
                     const isNext = idx === currentIndex;
@@ -336,28 +360,52 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
                 
                 {/* Goal / Completion Loot */}
                 <div className="w-6 h-0.5 mb-4 bg-zinc-800" />
-                <div className={`
-                    relative group flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center border-2 ml-2 mb-4 shadow-lg cursor-help transition-all
-                    ${currentIndex >= totalEncounters ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500 shadow-yellow-500/20 scale-110' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}
+                <div 
+                    onMouseEnter={() => setHoveredReward(currentLocation.completionReward)}
+                    onMouseLeave={() => setHoveredReward(null)}
+                    className={`
+                    relative flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center border-2 ml-2 mb-4 shadow-lg cursor-help transition-all
+                    ${currentIndex >= totalEncounters ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500 shadow-yellow-500/20 scale-110' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}
                 `}>
-                    <RewardIcon type={currentLocation.completionReward.type} />
-                    
-                    {/* Loot Tooltip */}
-                    <div className="absolute bottom-full mb-2 right-0 w-52 bg-zinc-950 border border-yellow-700/50 p-3 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                        <div className="text-xs font-black text-yellow-500 uppercase mb-1 flex items-center gap-2">
-                             Completion Reward
-                        </div>
-                        <div className="text-sm font-bold text-white mb-1">{currentLocation.completionReward.description}</div>
-                        <div className="text-[10px] text-zinc-500 italic border-t border-zinc-800 pt-1 mt-1">
-                            Clear all encounters to claim this prize.
-                        </div>
-                    </div>
+                    <RewardIcon reward={currentLocation.completionReward} />
                 </div>
             </div>
         </div>
+
+        {/* Hovered Reward Overlay */}
+        {hoveredReward && (
+            <div className="absolute bottom-24 right-6 z-50 pointer-events-none">
+                <div className="bg-zinc-950 border border-yellow-500/50 p-4 rounded-xl shadow-[0_0_30px_rgba(234,179,8,0.2)] max-w-xs animate-in slide-in-from-bottom-2 fade-in">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+                           <RewardIcon reward={hoveredReward} />
+                        </div>
+                        <div>
+                            <div className="text-xs font-black text-yellow-500 uppercase tracking-wider">Completion Reward</div>
+                            <div className="text-sm font-bold text-white leading-tight">{hoveredReward.description}</div>
+                        </div>
+                    </div>
+                    <div className="text-[10px] text-zinc-400 border-t border-zinc-800 pt-2 mt-2 leading-relaxed">
+                        Defeat all encounters in this location to claim this reward.
+                    </div>
+                </div>
+            </div>
+        )}
+
       </div>
     </div>
   );
 };
+
+// Helper for inline suit icons in Map
+const CardSuitIcon = ({ suit }: { suit: string }) => {
+    switch(suit) {
+        case 'hearts': return <span className="text-red-500">♥</span>;
+        case 'diamonds': return <span className="text-red-500">♦</span>;
+        case 'spades': return <span className="text-zinc-400">♠</span>;
+        case 'clubs': return <span className="text-zinc-400">♣</span>;
+        default: return null;
+    }
+}
 
 export default AdventureBoard;
