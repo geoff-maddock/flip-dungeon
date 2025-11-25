@@ -52,6 +52,9 @@ const App: React.FC = () => {
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
   const generationStarted = useRef(false);
 
+  // Visual Effects State
+  const [damageOverlay, setDamageOverlay] = useState(false);
+
   // Game State
   const [locations, setLocations] = useState<AdventureLocation[]>(ADVENTURE_LOCATIONS);
   const [player, setPlayer] = useState<PlayerState>({
@@ -363,6 +366,10 @@ const App: React.FC = () => {
         damageTaken += damage;
         message = `FAILED! Took ${damage} Damage.`;
         detailsLog = `Took ${damage} Dmg`;
+        
+        // Trigger Damage Vignette
+        setDamageOverlay(true);
+        setTimeout(() => setDamageOverlay(false), 500);
       }
 
       updatedPlayerState = { ...prev, resources: newResources, scoring: newScoring, alignment: newAlignment, locationsCleared, damageTaken, items: newItems, stats: newStats };
@@ -730,6 +737,8 @@ const App: React.FC = () => {
            }));
            message += ` Took ${newDamage} Damage.`;
            playSFX('damage');
+           setDamageOverlay(true);
+           setTimeout(() => setDamageOverlay(false), 500);
       } else {
           message += " (Damage prevented)";
           playSFX('heal');
@@ -1086,7 +1095,12 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-6 max-w-7xl mx-auto flex flex-col gap-6">
+    <div className="min-h-screen p-4 md:p-6 max-w-7xl mx-auto flex flex-col gap-6 relative">
+      {/* Damage Overlay */}
+      {damageOverlay && (
+         <div className="fixed inset-0 z-[100] pointer-events-none bg-red-600/20 mix-blend-overlay animate-pulse ring-[20px] ring-inset ring-red-600/30"></div>
+      )}
+
       <header className="flex justify-between items-center bg-black/20 p-4 rounded-xl backdrop-blur-sm border border-white/5">
          <div className="flex items-center gap-4">
              <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center font-black text-zinc-500 border border-zinc-700">
@@ -1136,8 +1150,7 @@ const App: React.FC = () => {
       <AdventureBoard 
         locations={locations} 
         selectedCards={hand.filter(c => selectedCardIds.includes(c.id))}
-        playerMana={player.resources.mana}
-        playerXp={player.resources.xp}
+        player={player}
         onLocationAction={(locId) => handleAction('location', locId)}
         onExploreNewLand={handleExploreNewLand}
       />
@@ -1161,23 +1174,42 @@ const App: React.FC = () => {
               )}
           </div>
 
-          <div className="flex -space-x-8 md:-space-x-4 hover:space-x-2 transition-all duration-300 p-4 justify-center w-full md:w-auto">
-              {hand.map((card) => {
+          {/* Fanned Hand Layout */}
+          <div className="relative h-56 w-full max-w-2xl mx-auto flex justify-center items-end pb-4">
+              {hand.map((card, index) => {
                   const selectedIndex = selectedCardIds.indexOf(card.id);
                   const isSelected = selectedIndex >= 0;
+                  
+                  // Calculate fanning
+                  const totalCards = hand.length;
+                  const centerIndex = (totalCards - 1) / 2;
+                  const offset = index - centerIndex;
+                  const rotation = offset * 5; // Degrees per card
+                  const yOffset = Math.abs(offset) * 5; // Arc effect
+
                   return (
-                    <PlayingCard 
+                    <div 
                         key={card.id} 
-                        card={card} 
-                        selected={isSelected}
-                        selectionIndex={isSelected ? selectedIndex : undefined}
-                        onClick={() => toggleCardSelection(card.id)}
-                    />
+                        className="absolute transform transition-all duration-300 origin-bottom"
+                        style={{
+                            left: `calc(50% + ${offset * 40}px - 50px)`, // 50px is approx half card width
+                            bottom: `${isSelected ? 40 : 0}px`,
+                            zIndex: isSelected ? 50 : index + 10,
+                            transform: `rotate(${rotation}deg) translateY(${yOffset}px)`
+                        }}
+                    >
+                        <PlayingCard 
+                            card={card} 
+                            selected={isSelected}
+                            selectionIndex={isSelected ? selectedIndex : undefined}
+                            onClick={() => toggleCardSelection(card.id)}
+                        />
+                    </div>
                   );
               })}
           </div>
           
-           {/* Dungeon Discard Pile Visual (Placeholder to balance layout) */}
+           {/* Dungeon Discard Pile Visual */}
            <div className="relative hidden md:block group cursor-pointer" onClick={() => dungeonDiscard.length > 0 && setViewingDiscard('dungeon')}>
               <div className="w-28 h-44 border-2 border-dashed border-red-900/30 rounded-xl flex items-center justify-center bg-black/20 text-red-900/50 font-bold uppercase text-xs tracking-widest text-center">
                   Dungeon<br/>Discard
@@ -1219,70 +1251,72 @@ const App: React.FC = () => {
 
       {/* Resolution Overlay */}
       {phase === 'resolving' && turnResult && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
               <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-2xl w-full p-8 shadow-2xl relative overflow-hidden">
                   <div className={`absolute top-0 left-0 right-0 h-2 ${turnResult.success ? 'bg-green-500' : 'bg-red-500'}`} />
                   
-                  <h2 className="text-3xl font-black text-center mb-8 tracking-tight flex flex-col items-center gap-2">
+                  <h2 className="text-3xl font-black text-center mb-12 tracking-tight flex flex-col items-center gap-2 animate-in zoom-in duration-300">
                       {turnResult.success ? (
-                          <span className="text-green-500 drop-shadow-[0_0_10px_rgba(34,197,94,0.5)]">SUCCESS</span>
+                          <span className="text-green-500 drop-shadow-[0_0_15px_rgba(34,197,94,0.6)]">SUCCESS</span>
                       ) : (
-                          <span className="text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]">FAILURE</span>
+                          <span className="text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.6)]">FAILURE</span>
                       )}
                       <span className="text-lg text-zinc-400 font-medium font-mono text-center">{turnResult.message}</span>
                   </h2>
 
-                  <div className="flex items-center justify-center gap-8 md:gap-16 mb-8">
-                      <div className="flex flex-col items-center gap-2">
-                          <div className="flex -space-x-12 scale-75">
+                  <div className="flex items-center justify-center gap-4 md:gap-8 mb-12 relative h-48">
+                      {/* Player Cards Slide In Left */}
+                      <div className="flex flex-col items-center gap-2 absolute left-4 md:left-12 top-0 animate-in slide-in-from-left-full duration-500 ease-out">
+                          <div className="flex -space-x-12 scale-90">
                             {turnResult.playerCards.map((c, i) => (
-                                <div key={i} className="transform hover:scale-110 transition-transform relative z-10">
+                                <div key={i} className="transform hover:scale-110 transition-transform relative z-10 shadow-xl">
                                     <PlayingCard card={c} />
                                 </div>
                             ))}
                           </div>
-                          <div className="text-center mt-2">
+                          <div className="text-center mt-2 bg-black/50 px-3 py-1 rounded backdrop-blur-sm">
                               <div className="font-bold text-xl text-white">
                                   {turnResult.playerCards.reduce((a, b) => a + b.value, 0) + turnResult.statBonus + turnResult.suitBonus}
                               </div>
-                              <div className="text-xs text-zinc-500 uppercase font-bold">Your Power</div>
-                              <div className="text-[10px] text-zinc-600">
-                                Cards: {turnResult.playerCards.reduce((a, b) => a + b.value, 0)} + Stat: {turnResult.statBonus} + Bonus: {turnResult.suitBonus}
+                              <div className="text-[10px] text-zinc-400">
+                                Total Power
                               </div>
                           </div>
                       </div>
 
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="font-black text-4xl text-zinc-600">VS</div>
-                        {turnResult.margin !== undefined && (
-                           <div className={`flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded ${turnResult.success ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
-                               {turnResult.success ? <TrendingUp size={12}/> : null}
-                               Margin: {turnResult.margin}
-                           </div>
-                        )}
+                      <div className="flex flex-col items-center gap-1 z-10 bg-zinc-900 rounded-full p-2 border border-zinc-800 shadow-xl">
+                        <div className="font-black text-3xl text-zinc-600">VS</div>
                       </div>
 
-                      <div className="flex flex-col items-center gap-2">
-                          <div className="scale-75">
+                      {/* Dungeon Card Slides In Right */}
+                      <div className="flex flex-col items-center gap-2 absolute right-4 md:right-12 top-0 animate-in slide-in-from-right-full duration-500 ease-out">
+                          <div className="scale-90 shadow-xl">
                              <PlayingCard card={turnResult.dungeonCard} />
                           </div>
-                          <div className="text-center mt-2">
+                          <div className="text-center mt-2 bg-black/50 px-3 py-1 rounded backdrop-blur-sm">
                               <div className="font-bold text-xl text-red-400">{turnResult.dungeonCard.value}</div>
-                              <div className="text-xs text-zinc-500 uppercase font-bold">Difficulty</div>
-                              {turnResult.modifierEffect && (
-                                <div className="text-[10px] text-red-400 font-medium max-w-[120px] leading-tight mt-1">
-                                    {turnResult.modifierEffect}
-                                </div>
-                              )}
+                              <div className="text-[10px] text-zinc-400">
+                                Difficulty
+                              </div>
                           </div>
                       </div>
+                  </div>
+                  
+                  {/* Margin display centered below clash */}
+                  <div className="flex justify-center mb-8">
+                    {turnResult.margin !== undefined && (
+                        <div className={`flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-full border shadow-lg ${turnResult.success ? 'bg-green-900/30 text-green-400 border-green-800' : 'bg-red-900/30 text-red-400 border-red-800'}`}>
+                            {turnResult.success ? <TrendingUp size={16}/> : <TrendingUp size={16} className="rotate-180"/>}
+                            Margin of {turnResult.success ? 'Success' : 'Failure'}: {turnResult.margin}
+                        </div>
+                    )}
                   </div>
 
                   <div className="flex gap-3 justify-center">
                     {!turnResult.success && player.resources.mana >= 2 && (
                         <button 
                             onClick={handleRewindFate}
-                            className="flex items-center gap-2 px-6 py-3 bg-blue-900/50 hover:bg-blue-900 text-blue-200 rounded-lg font-bold transition-colors border border-blue-800"
+                            className="flex items-center gap-2 px-6 py-3 bg-blue-900/50 hover:bg-blue-900 text-blue-200 rounded-lg font-bold transition-colors border border-blue-800 shadow-[0_0_15px_rgba(30,58,138,0.3)]"
                         >
                             <RefreshCcw size={18} />
                             Rewind Fate (2 Mana)
@@ -1291,7 +1325,7 @@ const App: React.FC = () => {
                     
                     <button 
                         onClick={endTurn}
-                        className="px-8 py-3 bg-zinc-100 hover:bg-white text-black font-black rounded-lg transition-colors shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+                        className="px-8 py-3 bg-zinc-100 hover:bg-white text-black font-black rounded-lg transition-colors shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:scale-105 transform"
                     >
                         CONTINUE
                     </button>

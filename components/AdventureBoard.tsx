@@ -1,14 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { AdventureLocation, Card, NodeModifier, Reward } from '../types';
+import { AdventureLocation, Card, NodeModifier, Reward, PlayerState } from '../types';
 import { Map, Castle, Trees, Mountain, Tent, Sword, ShieldAlert, EyeOff, Minimize, Info, Gift, Compass, Flag, PlusCircle, Split, Crown, Coins, Star, Zap, Sparkles, Leaf, Shield } from 'lucide-react';
 import { getSuitSymbol } from '../utils/deck';
 
 interface AdventureBoardProps {
   locations: AdventureLocation[];
   selectedCards: Card[];
-  playerMana: number;
-  playerXp: number;
+  player: PlayerState;
   onLocationAction: (locationId: string) => void;
   onExploreNewLand: () => void;
 }
@@ -75,7 +74,7 @@ const ModifierIcon = ({ mod }: { mod: NodeModifier }) => {
     }
 };
 
-const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCards, playerMana, playerXp, onLocationAction, onExploreNewLand }) => {
+const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCards, player, onLocationAction, onExploreNewLand }) => {
   const [activeTab, setActiveTab] = useState(locations[0].id);
   const [hoveredReward, setHoveredReward] = useState<Reward | null>(null);
   
@@ -86,6 +85,8 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
   }, [locations, activeTab]);
 
   const currentLocation = locations.find(l => l.id === activeTab);
+  const playerMana = player.resources.mana;
+  const playerXp = player.resources.xp;
 
   const manaCost = Math.max(0, selectedCards.length - 1);
   const canAfford = playerMana >= manaCost;
@@ -107,6 +108,18 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
       if (['hearts', 'diamonds'].includes(firstCard.suit)) nextPathColor = 'red';
       else nextPathColor = 'black';
   }
+
+  // Calculate Predicted Power
+  const calculateAdventurePower = () => {
+    if (selectedCards.length === 0) return 0;
+    const statKey = currentLocation.statAttribute;
+    const statVal = player.stats[statKey] + (player.activeBuffs[statKey] || 0);
+    const suitBonus = selectedCards.filter(c => c.suit === currentLocation.preferredSuit).length * 2;
+    const cardTotal = selectedCards.reduce((acc, c) => acc + c.value, 0);
+    return cardTotal + statVal + suitBonus;
+  };
+
+  const predictedPower = calculateAdventurePower();
 
   return (
     <div className="mt-6 bg-zinc-950/80 backdrop-blur-md rounded-xl border border-zinc-800/50 overflow-hidden flex flex-col md:flex-row min-h-[380px] shadow-2xl">
@@ -267,7 +280,7 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
                     disabled={selectedCards.length === 0 || !canAfford || currentIndex >= totalEncounters || isBlocked}
                     onClick={() => onLocationAction(currentLocation.id)}
                     className={`
-                        flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all shadow-lg border
+                        flex flex-col items-center justify-center gap-0.5 px-6 py-2 rounded-lg font-bold transition-all shadow-lg border h-14 min-w-[160px]
                         ${selectedCards.length === 0 || !canAfford || isBlocked
                             ? 'bg-zinc-800/50 text-zinc-600 border-zinc-800 cursor-not-allowed'
                             : currentIndex >= totalEncounters
@@ -280,8 +293,15 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
                     <span>CLEARED</span>
                 ) : (
                     <>
-                        <Sword size={18} />
-                        <span>EXPLORE {nextPathColor ? (nextPathColor === 'red' ? '(Red Path)' : '(Black Path)') : ''}</span>
+                        <div className="flex items-center gap-2">
+                            <Sword size={18} />
+                            <span>EXPLORE {nextPathColor ? (nextPathColor === 'red' ? '(Red)' : '(Black)') : ''}</span>
+                        </div>
+                        {!isBlocked && predictedPower > 0 && (
+                             <div className="text-[10px] font-mono text-yellow-300 bg-black/20 px-2 rounded">
+                                Power: {predictedPower}
+                             </div>
+                        )}
                     </>
                 )}
                 </button>

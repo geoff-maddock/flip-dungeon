@@ -109,7 +109,8 @@ const ActionButton = ({
   disabled,
   manaCost,
   tooltip,
-  variant = 'neutral'
+  variant = 'neutral',
+  predictedPower = 0
 }: { 
   label: string; 
   subtext: string; 
@@ -120,6 +121,7 @@ const ActionButton = ({
   manaCost: number;
   tooltip: string;
   variant?: 'neutral' | 'evil' | 'good';
+  predictedPower?: number;
 }) => (
   <button
     onClick={onClick}
@@ -148,6 +150,14 @@ const ActionButton = ({
     </div>
     <div className="text-xs text-zinc-500 group-hover:text-zinc-400 relative z-10 leading-tight whitespace-pre-line">{subtext}</div>
     
+    {/* Dynamic Power Preview */}
+    {!disabled && predictedPower > 0 && (
+      <div className="mt-2 w-full bg-black/40 rounded px-2 py-1 flex justify-between items-center border border-white/5">
+        <span className="text-[9px] uppercase text-zinc-500 font-bold">Power</span>
+        <span className="text-sm font-mono font-bold text-yellow-500">{predictedPower}</span>
+      </div>
+    )}
+
     {/* Mana Cost Indicator */}
     {manaCost > 0 && !disabled && (
         <div className="absolute top-0 right-0 bg-blue-900/80 text-blue-200 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg border-l border-b border-blue-800 z-20">
@@ -222,6 +232,15 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
 
   // Time Warp Cost
   const timeWarpCost = player.extraTurnsBought + 1;
+
+  // Helper to calculate total power for a self action to preview it
+  const calculateSelfPower = (stat: StatAttribute, targetSuit: string) => {
+    if (selectedCards.length === 0) return 0;
+    const cardTotal = selectedCards.reduce((acc, c) => acc + c.value, 0);
+    const statVal = player.stats[stat] + (player.activeBuffs[stat] || 0);
+    const suitBonus = selectedCards.filter(c => c.suit === targetSuit).length * 2;
+    return cardTotal + statVal + suitBonus;
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-zinc-950/80 backdrop-blur-md p-4 md:p-6 rounded-xl shadow-2xl border border-zinc-800/50">
@@ -418,7 +437,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
 
         {/* Shop Overlay Area */}
         {showShop && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-zinc-950 p-4 rounded-lg border border-yellow-900/30 animate-in slide-in-from-top-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-zinc-950 p-4 rounded-lg border border-yellow-900/30 animate-in slide-in-from-top-2 z-20 relative">
                  {[
                      { name: "Potion", cost: 5, desc: "+3 HP", action: () => onBuyItem("Potion", 5, undefined, 3) },
                      { name: "Whetstone", cost: 3, desc: "+2 Might (1 Rd)", action: () => onBuyItem("Whetstone", 3, 'might', 2) },
@@ -451,7 +470,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
 
         {/* Spellbook Overlay Area */}
         {showSpellbook && (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 bg-zinc-950 p-4 rounded-lg border border-blue-900/30 animate-in slide-in-from-top-2">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 bg-zinc-950 p-4 rounded-lg border border-blue-900/30 animate-in slide-in-from-top-2 z-20 relative">
                 <SpellButton
                     label="Transmute"
                     description="Discard 1 selected card to draw a new one."
@@ -505,7 +524,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
         )}
 
         {/* Action Selection Area */}
-        <div className="bg-black/40 rounded-lg border border-zinc-800/50 p-4 flex-1 flex flex-col justify-center shadow-inner">
+        <div className="bg-black/40 rounded-lg border border-zinc-800/50 p-4 flex-1 flex flex-col justify-center shadow-inner z-10 relative">
             <h3 className="text-xs font-bold text-zinc-500 mb-3 flex justify-between uppercase tracking-widest">
                <span>Self Actions</span>
                {selectedCards.length > 0 ? (
@@ -529,6 +548,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
                   disabled={selectedCards.length === 0 || !canAfford}
                   onClick={() => onSelfAction('rest')}
                   manaCost={manaCost}
+                  predictedPower={calculateSelfPower('spirit', 'hearts')}
                   tooltip={`Rest to recover health.\n• Base: Heal 2 HP\n• Crit: +1 HP for every 5 margin\n• Suit Bonus (Hearts): +1 HP`}
                />
                <ActionButton 
@@ -539,6 +559,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
                   disabled={selectedCards.length === 0 || !canAfford}
                   onClick={() => onSelfAction('train')}
                   manaCost={manaCost}
+                  predictedPower={calculateSelfPower('might', 'clubs')}
                   tooltip={`Train to gain experience.\n• Base: Gain 1 XP\n• Crit: +1 XP for every 8 margin\n• Suit Bonus (Clubs): +1 XP`}
                />
                <ActionButton 
@@ -549,6 +570,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
                   disabled={selectedCards.length === 0 || !canAfford}
                   onClick={() => onSelfAction('loot')}
                   manaCost={manaCost}
+                  predictedPower={calculateSelfPower('agility', 'spades')}
                   tooltip={`Loot to find gold.\n• Base: Gain 1 Gold\n• Crit: +1 Gold for every 4 margin\n• Suit Bonus (Spades): +1 Gold`}
                />
                <ActionButton 
@@ -559,6 +581,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
                   disabled={selectedCards.length === 0 || !canAfford}
                   onClick={() => onSelfAction('study')}
                   manaCost={manaCost}
+                  predictedPower={calculateSelfPower('wisdom', 'diamonds')}
                   tooltip={`Study to gather mana.\n• Base: Gain 1 Mana\n• Crit: +1 Mana for every 4 margin\n• Suit Bonus (Diamonds): +1 Mana`}
                />
             </div>

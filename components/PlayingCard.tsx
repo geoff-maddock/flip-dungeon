@@ -6,11 +6,12 @@ import { Shield, Sword, Heart, Sparkles } from 'lucide-react';
 interface PlayingCardProps {
   card: Card;
   selected?: boolean;
-  selectionIndex?: number; // Added to show order
+  selectionIndex?: number;
   onClick?: () => void;
+  style?: React.CSSProperties; // Added for fanning transform
 }
 
-const PlayingCard: React.FC<PlayingCardProps> = ({ card, selected, selectionIndex, onClick }) => {
+const PlayingCard: React.FC<PlayingCardProps> = ({ card, selected, selectionIndex, onClick, style }) => {
   const colorClass = ['hearts', 'diamonds'].includes(card.suit) ? 'text-red-500' : 'text-zinc-800';
   const symbol = getSuitSymbol(card.suit);
 
@@ -35,42 +36,43 @@ const PlayingCard: React.FC<PlayingCardProps> = ({ card, selected, selectionInde
   return (
     <div 
       onClick={onClick}
+      style={style}
       className={`
-        relative w-28 h-44 lg:w-32 lg:h-48 rounded-xl transition-all duration-300 transform
+        relative w-24 h-36 md:w-28 md:h-44 lg:w-32 lg:h-48 rounded-xl transition-all duration-300 transform origin-bottom
         ${selected 
-            ? 'bg-zinc-100 ring-4 ring-yellow-500/80 shadow-[0_0_20px_rgba(234,179,8,0.3)] scale-105 -translate-y-4 z-10' 
-            : 'bg-zinc-200 hover:bg-white hover:scale-105 hover:-translate-y-2 hover:shadow-xl z-0'
+            ? 'bg-zinc-100 ring-4 ring-yellow-500/80 shadow-[0_0_20px_rgba(234,179,8,0.5)] -translate-y-8 z-20' 
+            : 'bg-zinc-200 hover:bg-white hover:-translate-y-4 hover:shadow-xl shadow-lg'
         }
         flex flex-col justify-between p-2.5 select-none border border-zinc-300
-        group
+        group cursor-pointer
       `}
     >
       {selected && selectionIndex !== undefined && (
-        <div className="absolute -top-3 -right-3 w-7 h-7 bg-yellow-500 text-black font-bold rounded-full flex items-center justify-center shadow-md z-20 border-2 border-white">
+        <div className="absolute -top-3 -right-3 w-7 h-7 bg-yellow-500 text-black font-bold rounded-full flex items-center justify-center shadow-md z-30 border-2 border-white animate-bounce">
             {selectionIndex + 1}
         </div>
       )}
 
       {/* Top Left */}
-      <div className={`text-2xl font-black leading-none ${colorClass} flex flex-col items-center w-6`}>
+      <div className={`text-xl md:text-2xl font-black leading-none ${colorClass} flex flex-col items-center w-6`}>
         <span>{card.rank}</span>
-        <span className="text-xl">{symbol}</span>
+        <span className="text-lg md:text-xl">{symbol}</span>
       </div>
 
       {/* Center Graphic */}
       <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-         <span className={`text-6xl ${colorClass} scale-150 transform rotate-12`}>{symbol}</span>
+         <span className={`text-5xl md:text-6xl ${colorClass} scale-150 transform rotate-12`}>{symbol}</span>
       </div>
       
-      <div className="flex flex-col items-center justify-center space-y-1 z-10">
+      <div className="flex flex-col items-center justify-center space-y-1 z-10 opacity-60 group-hover:opacity-100 transition-opacity">
          {getActionIcon()}
-         <span className="text-[9px] font-bold text-zinc-500 text-center leading-tight tracking-tighter">{getActionText()}</span>
+         <span className="text-[8px] md:text-[9px] font-bold text-zinc-500 text-center leading-tight tracking-tighter">{getActionText()}</span>
       </div>
 
       {/* Bottom Right (Rotated) */}
-      <div className={`text-2xl font-black leading-none ${colorClass} flex flex-col items-center w-6 self-end transform rotate-180`}>
+      <div className={`text-xl md:text-2xl font-black leading-none ${colorClass} flex flex-col items-center w-6 self-end transform rotate-180`}>
         <span>{card.rank}</span>
-        <span className="text-xl">{symbol}</span>
+        <span className="text-lg md:text-xl">{symbol}</span>
       </div>
     </div>
   );
