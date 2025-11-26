@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { CharacterClass, GamePhase, PlayerState, Card, AdventureLocation, TurnResult, StatAttribute, HighScore, NodeModifier, Difficulty, TurnRecord, GameSettings, Encounter } from './types';
+import { CharacterClass, GamePhase, PlayerState, Card, AdventureLocation, TurnResult, StatAttribute, HighScore, NodeModifier, Difficulty, TurnRecord, GameSettings, Encounter, HandCombo } from './types';
 import { CLASS_DEFAULTS, ADVENTURE_LOCATIONS, DEFAULT_SETTINGS } from './constants';
-import { createDeck, shuffleDeck } from './utils/deck';
+import { createDeck, shuffleDeck, evaluateHandCombo } from './utils/deck';
 import { getHighScores, saveHighScore } from './utils/storage';
 import { generateEncounters, generateRandomLocation } from './utils/modifiers';
 import { playSFX, playPCMAudio } from './utils/sound';
@@ -38,6 +38,7 @@ const App: React.FC = () => {
   
   // Selection State
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+  const [activeCombo, setActiveCombo] = useState<HandCombo | undefined>(undefined);
   const [turnResult, setTurnResult] = useState<TurnResult | null>(null);
 
   // Persistence
@@ -71,8 +72,15 @@ const App: React.FC = () => {
     quests: [],
     locationsCleared: 0,
     damageTaken: 0,
-    extraTurnsBought: 0
+    extraTurnsBought: 0,
+    abilityCooldown: 0
   });
+
+  // Calculate combo whenever selection changes
+  useEffect(() => {
+    const selected = hand.filter(c => selectedCardIds.includes(c.id));
+    setActiveCombo(evaluateHandCombo(selected));
+  }, [selectedCardIds, hand]);
 
   // Load Settings from LocalStorage on mount
   useEffect(() => {
@@ -163,7 +171,8 @@ const App: React.FC = () => {
       quests: generateQuests(4),
       locationsCleared: 0,
       damageTaken: 0,
-      extraTurnsBought: 0
+      extraTurnsBought: 0,
+      abilityCooldown: 0
     }));
     
     // Initialize Locations
@@ -240,10 +249,30 @@ const App: React.FC = () => {
       actionType: string, 
       statBonus: number, 
       suitBonus: number, 
-      modifier: NodeModifier | null
+      modifier: NodeModifier | null,
+      autoCrit: boolean = false,
+      ignoreDamage: boolean = false
   ) => {
     let modifierEffect = "";
     let effectiveCardTotal = 0;
+    
+    // Calculate Card Value with Combo
+    const combo = evaluateHandCombo(playerCards);
+    let rawCardTotal = playerCards.reduce((sum, c) => {
+        if (modifier?.type === 'suit_penalty' && modifier.targetSuit === c.suit) {
+             modifierEffect += ` ${modifier.name} Penalty.`;
+             return sum;
+        }
+        return sum + c.value;
+    }, 0);
+
+    if (combo) {
+        if (combo.multiplier > 0) rawCardTotal = Math.floor(rawCardTotal * combo.multiplier);
+        rawCardTotal += combo.bonusPower;
+        modifierEffect += ` ${combo.name}!`;
+    }
+    effectiveCardTotal = rawCardTotal;
+
     let effectiveDungeonValue = dungeonCard.value;
 
     // Apply Difficulty Setting Modifier
@@ -261,24 +290,17 @@ const App: React.FC = () => {
         modifierEffect += " (Virtue +1) ";
     }
 
-    // Apply Player Card Logic
-    playerCards.forEach(c => {
-        if (modifier?.type === 'suit_penalty' && modifier.targetSuit === c.suit) {
-            modifierEffect += ` ${modifier.name} Penalty.`;
-        } else {
-            effectiveCardTotal += c.value;
-        }
-    });
-
     // Apply Node Modifier
-    if (modifier?.type === 'difficulty') {
+    if (modifier?.type === 'difficulty' || modifier?.type === 'elite_mechanic') {
         effectiveDungeonValue += modifier.value;
         modifierEffect += ` ${modifier.name} +${modifier.value}`;
     }
 
     const playerTotal = effectiveCardTotal + statBonus + suitBonus;
-    const success = playerTotal >= effectiveDungeonValue;
-    const margin = Math.max(0, playerTotal - effectiveDungeonValue);
+    
+    // Auto-Crit Override
+    const success = autoCrit || playerTotal >= effectiveDungeonValue;
+    const margin = autoCrit ? 10 : Math.max(0, playerTotal - effectiveDungeonValue);
     
     let message = "";
     let detailsLog = "";
@@ -303,7 +325,7 @@ const App: React.FC = () => {
         else if (actionType === 'train') playSFX('block');
         else playSFX('attack');
 
-        message = "SUCCESS!";
+        message = autoCrit ? "CRITICAL HIT!" : "SUCCESS!";
 
         // Good Alignment Reward
         if (prev.alignment >= settings.goodThreshold) {
@@ -378,21 +400,33 @@ const App: React.FC = () => {
         if (suitBonus > 0) message += ` (Suit Match!)`;
 
       } else {
-        playSFX('damage');
-        const diffDamage = Math.max(0, effectiveDungeonValue - playerTotal);
-        const cardPenalty = playerCards.length;
-        damage = diffDamage + cardPenalty;
-        damage = Math.max(1, damage);
-        
-        newResources.health = Math.max(0, newResources.health - damage);
-        damageTaken += damage;
-        message = `FAILED! Took ${damage} Damage.`;
-        detailsLog = `Took ${damage} Dmg`;
-        triggerFloatingText(`-${damage} HP`, 'damage');
-        
-        // Trigger Damage Vignette
-        setDamageOverlay(true);
-        setTimeout(() => setDamageOverlay(false), 500);
+        if (ignoreDamage) {
+            message = "FAILED! (Damage Prevented)";
+            detailsLog = "Failed (Shielded)";
+            triggerFloatingText("Damage Blocked", 'heal');
+        } else {
+            playSFX('damage');
+            const diffDamage = Math.max(0, effectiveDungeonValue - playerTotal);
+            const cardPenalty = playerCards.length;
+            damage = diffDamage + cardPenalty;
+            damage = Math.max(1, damage);
+            
+            // Elite Mechanic: Double Damage
+            if (modifier?.type === 'elite_mechanic' && modifier.description.includes('Double Damage')) {
+                damage *= 2;
+                message += " (x2 Elite Damage!)";
+            }
+
+            newResources.health = Math.max(0, newResources.health - damage);
+            damageTaken += damage;
+            message = `FAILED! Took ${damage} Damage.`;
+            detailsLog = `Took ${damage} Dmg`;
+            triggerFloatingText(`-${damage} HP`, 'damage');
+            
+            // Trigger Damage Vignette
+            setDamageOverlay(true);
+            setTimeout(() => setDamageOverlay(false), 500);
+        }
       }
 
       updatedPlayerState = { ...prev, resources: newResources, scoring: newScoring, alignment: newAlignment, locationsCleared, damageTaken, items: newItems, stats: newStats };
@@ -471,9 +505,23 @@ const App: React.FC = () => {
                     rewardMsg = `+${reward.value} ${reward.target}`;
                     triggerFloatingText(rewardMsg, 'info');
                 }
+                
+                // Alignment Reward for clearing a location
+                const newAlignment = Math.min(settings.alignmentMax, p.alignment + 1);
+                if (newAlignment > p.alignment) {
+                    message += " (+1 Virtue)";
+                    triggerFloatingText("+1 Virtue", 'heal'); // Re-use heal color style for positive reinforcement
+                }
 
                 message += ` LOCATION CLEARED! Reward: ${rewardMsg}`;
-                return { ...p, resources: r, stats: s, items: i, locationsCleared: p.locationsCleared + 1 };
+                return { 
+                    ...p, 
+                    resources: r, 
+                    stats: s, 
+                    items: i, 
+                    locationsCleared: p.locationsCleared + 1,
+                    alignment: newAlignment 
+                };
             });
             playSFX('level_up');
         }
@@ -498,6 +546,7 @@ const App: React.FC = () => {
       damage,
       statBonus,
       suitBonus,
+      combo,
       modifierEffect,
       margin,
       pendingRecord
@@ -508,6 +557,46 @@ const App: React.FC = () => {
   const handleAction = (type: 'self' | 'location', target: string) => {
     // Special Spellbook Actions
     if (type === 'self') {
+        if (target === 'ability') {
+            const ability = CLASS_DEFAULTS[player.class].ability;
+            if (player.resources.mana < ability.manaCost) return;
+            playSFX('magic');
+            
+            // Deduct cost and set cooldown
+            setPlayer(prev => ({
+                ...prev,
+                resources: { ...prev.resources, mana: prev.resources.mana - ability.manaCost },
+                abilityCooldown: ability.cooldown
+            }));
+
+            // Handle Immediate Effects
+            if (ability.effectType === 'heal') {
+                setPlayer(prev => ({ ...prev, resources: { ...prev.resources, health: Math.min(prev.resources.maxHealth, prev.resources.health + (ability.value || 0)) } }));
+                triggerFloatingText(`${ability.name}!`, 'heal');
+            } else if (ability.effectType === 'resource_boost') {
+                if (player.class === 'Alchemist') {
+                     setPlayer(prev => ({ ...prev, resources: { ...prev.resources, mana: prev.resources.mana + 3, xp: prev.resources.xp + 3 } }));
+                     triggerFloatingText("Elixir Consumed", 'mana');
+                }
+            } else if (ability.effectType === 'draw') {
+                 // Discard hand and draw
+                 setPlayerDiscard(prev => [...prev, ...hand]);
+                 const newHand = drawCards(5);
+                 setHand(newHand);
+                 // Special Necromancer logic check
+                 const spades = newHand.filter(c => c.suit === 'spades').length;
+                 if (spades > 0) {
+                     setPlayer(prev => ({ ...prev, resources: { ...prev.resources, gold: prev.resources.gold + spades }}));
+                     triggerFloatingText(`Soul Harvest: +${spades} Gold`, 'gold');
+                 }
+            } else {
+                 // For next-action effects (auto_crit, damage_block), we store a buff or handle logic in next action
+                 // Simplifying: Triggering ability sets a specific 1-turn buff
+                 setPlayer(prev => ({ ...prev, activeBuffs: { ...prev.activeBuffs, [ability.effectType]: 1 } }));
+                 triggerFloatingText(`${ability.name} Active`, 'info');
+            }
+            return;
+        }
         if (target === 'dark_pact') {
              playSFX('evil');
              setPlayer(prev => ({
@@ -553,7 +642,9 @@ const App: React.FC = () => {
     const selectedCards = hand.filter(c => selectedCardIds.includes(c.id));
     const manaCost = Math.max(0, (selectedCards.length - 1) * settings.manaCostPerExtraCard);
     
-    if (player.resources.mana < manaCost) return;
+    // Check for "Encore" (Bard Ability) - free mana cost
+    const isEncore = player.activeBuffs['resource_boost'] && player.class === 'Bard';
+    if (player.resources.mana < manaCost && !isEncore) return;
 
     // Modifiers Check
     let activeModifier: NodeModifier | null = null;
@@ -571,10 +662,19 @@ const App: React.FC = () => {
     }
 
     // Deduct Mana
-    setPlayer(prev => ({
-        ...prev,
-        resources: { ...prev.resources, mana: prev.resources.mana - manaCost }
-    }));
+    if (!isEncore) {
+        setPlayer(prev => ({
+            ...prev,
+            resources: { ...prev.resources, mana: prev.resources.mana - manaCost }
+        }));
+    } else {
+        // Consume Encore
+        setPlayer(prev => {
+            const newBuffs = { ...prev.activeBuffs };
+            delete newBuffs['resource_boost'];
+            return { ...prev, activeBuffs: newBuffs };
+        });
+    }
 
     // 1. Draw Dungeon Card
     let dDeck = [...dungeonDeck];
@@ -631,7 +731,21 @@ const App: React.FC = () => {
 
     suitBonus = selectedCards.filter(c => c.suit === targetSuit).length * 2;
 
-    resolveTurn(selectedCards, dCard, actionKey, baseStat + buff, suitBonus, activeModifier);
+    // Check Heroic Buffs
+    const autoCrit = !!player.activeBuffs['auto_crit'];
+    const damageBlock = !!player.activeBuffs['damage_block'];
+
+    // Consume buffs
+    if (autoCrit || damageBlock) {
+         setPlayer(prev => {
+            const newBuffs = { ...prev.activeBuffs };
+            if (autoCrit) delete newBuffs['auto_crit'];
+            if (damageBlock) delete newBuffs['damage_block'];
+            return { ...prev, activeBuffs: newBuffs };
+        });
+    }
+
+    resolveTurn(selectedCards, dCard, actionKey, baseStat + buff, suitBonus, activeModifier, autoCrit, damageBlock);
   };
 
   const handleLevelUp = (stat: StatAttribute | 'PLAYER_LEVEL') => {
@@ -739,15 +853,27 @@ const App: React.FC = () => {
       const newDCard = dDeck[0]; 
       setDungeonDeck(dDeck.slice(1));
 
-      const cardTotal = turnResult.playerCards.reduce((sum, c) => sum + c.value, 0);
-      const playerTotal = cardTotal + turnResult.statBonus + turnResult.suitBonus;
-      let dungeonTotal = newDCard.value;
+      // Re-evaluate
+      const playerTotal = turnResult.playerCards.reduce((sum, c) => sum + c.value, 0) 
+                          + turnResult.statBonus 
+                          + turnResult.suitBonus 
+                          + (turnResult.combo?.bonusPower || 0); // Need to account for combo manually if re-calculating raw sum is complex, but wait.
+      // Actually turnResult already has the final card calc done but split.
+      // Re-calc effective player total
+      let effectiveCardTotal = turnResult.playerCards.reduce((sum, c) => sum + c.value, 0);
+      if (turnResult.combo) {
+          if (turnResult.combo.multiplier > 0) effectiveCardTotal = Math.floor(effectiveCardTotal * turnResult.combo.multiplier);
+          effectiveCardTotal += turnResult.combo.bonusPower;
+      }
       
+      const totalPower = effectiveCardTotal + turnResult.statBonus + turnResult.suitBonus;
+
+      let dungeonTotal = newDCard.value;
       if (difficulty === 'Easy') dungeonTotal = Math.max(1, dungeonTotal - 2);
       else if (difficulty === 'Hard') dungeonTotal += 2;
       
-      const success = playerTotal >= dungeonTotal;
-      const margin = Math.max(0, playerTotal - dungeonTotal);
+      const success = totalPower >= dungeonTotal;
+      const margin = Math.max(0, totalPower - dungeonTotal);
       let message = success ? "FATE REWRITTEN: SUCCESS!" : `FATE RESISTED!`;
       
       setPlayer(prev => {
@@ -763,7 +889,7 @@ const App: React.FC = () => {
 
       let newDamage = 0;
       if (!success) {
-           const diffDamage = Math.max(0, dungeonTotal - playerTotal);
+           const diffDamage = Math.max(0, dungeonTotal - totalPower);
            const cardPenalty = turnResult.playerCards.length;
            newDamage = Math.max(1, diffDamage + cardPenalty);
            setPlayer(prev => ({ 
@@ -875,12 +1001,16 @@ const App: React.FC = () => {
         triggerFloatingText("Evil rots you... -1 HP", 'damage');
     }
 
+    // Cooldown management
+    setPlayer(prev => ({ ...prev, abilityCooldown: Math.max(0, prev.abilityCooldown - 1) }));
+
     if (turn >= settings.turnsPerRound) {
       if (round >= settings.maxRounds) {
         setPhase('game_over');
       } else {
         setRound(r => r + 1);
         setTurn(1);
+        // Clear temp buffs
         setPlayer(prev => ({ ...prev, activeBuffs: {} }));
         triggerFloatingText("New Round Started", 'info');
       }
@@ -1197,12 +1327,13 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
           
           {/* Sidebar (Desktop) / Top Section (Mobile) */}
-          <aside className="w-full lg:w-96 xl:w-[450px] flex-shrink-0 bg-zinc-900/95 border-b lg:border-b-0 lg:border-r border-zinc-800/50 overflow-y-auto scrollbar-thin z-20">
+          <aside className="w-full lg:w-[450px] xl:w-[500px] flex-shrink-0 bg-zinc-900/95 border-b lg:border-b-0 lg:border-r border-zinc-800/50 overflow-y-auto scrollbar-thin z-20">
               <div className="p-4 lg:p-6 pb-24 lg:pb-6">
                 <PlayerDashboard 
                     player={player} 
                     characterImage={customClassImages[player.class] || CLASS_DEFAULTS[player.class].image}
                     selectedCards={hand.filter(c => selectedCardIds.includes(c.id))}
+                    combo={activeCombo}
                     onSelfAction={(type) => handleAction('self', type)}
                     onLevelUp={handleLevelUp}
                     onBuyItem={handleBuyItem}
@@ -1220,6 +1351,7 @@ const App: React.FC = () => {
                     locations={locations} 
                     selectedCards={hand.filter(c => selectedCardIds.includes(c.id))}
                     player={player}
+                    combo={activeCombo}
                     onLocationAction={(locId) => handleAction('location', locId)}
                     onExploreNewLand={handleExploreNewLand}
                 />
@@ -1358,7 +1490,12 @@ const App: React.FC = () => {
                           </div>
                           <div className="text-center mt-2 bg-black/50 px-3 py-1 rounded backdrop-blur-sm">
                               <div className="font-bold text-xl text-white">
-                                  {turnResult.playerCards.reduce((a, b) => a + b.value, 0) + turnResult.statBonus + turnResult.suitBonus}
+                                  {
+                                    (turnResult.combo && turnResult.combo.multiplier > 0 
+                                      ? Math.floor(turnResult.playerCards.reduce((a, b) => a + b.value, 0) * turnResult.combo.multiplier) 
+                                      : turnResult.playerCards.reduce((a, b) => a + b.value, 0)) 
+                                    + turnResult.statBonus + turnResult.suitBonus + (turnResult.combo?.bonusPower || 0)
+                                  }
                               </div>
                               <div className="text-[10px] text-zinc-400">
                                 Total Power

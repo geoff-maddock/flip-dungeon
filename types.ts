@@ -34,6 +34,16 @@ export interface PlayerStats {
   spirit: number;
 }
 
+export interface ClassAbility {
+    name: string;
+    description: string;
+    manaCost: number;
+    cooldown: number; // in turns
+    effectType: 'heal' | 'damage_block' | 'auto_crit' | 'draw' | 'reroll_free' | 'resource_boost';
+    value?: number;
+    icon: string;
+}
+
 export interface Resources {
   health: number;
   maxHealth: number;
@@ -81,6 +91,7 @@ export interface PlayerState {
   locationsCleared: number;
   damageTaken: number; // Tracked for specific quests
   extraTurnsBought: number; // Tracks cost scaling for Time Warp
+  abilityCooldown: number; // Current cooldown remaining
 }
 
 export type GamePhase = 'setup' | 'playing' | 'resolving' | 'round_end' | 'game_over';
@@ -88,7 +99,7 @@ export type GamePhase = 'setup' | 'playing' | 'resolving' | 'round_end' | 'game_
 export type StatAttribute = keyof PlayerStats;
 
 // --- Modifiers ---
-export type ModifierType = 'difficulty' | 'max_cards' | 'suit_penalty' | 'stat_penalty';
+export type ModifierType = 'difficulty' | 'max_cards' | 'suit_penalty' | 'stat_penalty' | 'elite_mechanic';
 
 export interface NodeModifier {
   type: ModifierType;
@@ -151,6 +162,13 @@ export interface TurnRecord {
   cardCount: number;
 }
 
+export interface HandCombo {
+    name: string;
+    multiplier: number;
+    bonusPower: number;
+    cardsInvolved: number;
+}
+
 export interface TurnResult {
   playerCards: Card[];
   dungeonCard: Card;
@@ -160,6 +178,7 @@ export interface TurnResult {
   damage?: number;
   statBonus: number;
   suitBonus: number;
+  combo?: HandCombo;
   modifierEffect?: string; // Text description of what the modifier did
   margin?: number; // The amount by which the player succeeded
   pendingRecord: TurnRecord; // The history log to be saved if turn is confirmed

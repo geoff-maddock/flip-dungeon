@@ -1,4 +1,5 @@
-import { Card, Suit, Rank } from '../types';
+
+import { Card, Suit, Rank, HandCombo } from '../types';
 
 const SUITS: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
 const RANKS: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
@@ -44,10 +45,61 @@ export const getSuitSymbol = (suit: Suit): string => {
 export const getSuitColor = (suit: Suit): string => {
   switch (suit) {
     case 'hearts': return 'text-red-500';
-    case 'diamonds': return 'text-blue-400'; // Game specific: Diamonds = Magick/Wealth (Blue/Goldish, prompt said Red but also Magick usually blue in games, keeping prompt red for consistency or diverging for better UX? Prompt said Diamonds (red). I will use Red for suit color to be accurate to playing cards, but add an icon color for the resource.)
+    case 'diamonds': return 'text-blue-400'; 
     case 'clubs': return 'text-slate-400';
     case 'spades': return 'text-zinc-200';
   }
 };
 
-// Prompt: "Diamonds (red) - magick / wealth". I will stick to visual red for the card itself, but the associated resource might be colored differently in the UI.
+export const evaluateHandCombo = (cards: Card[]): HandCombo | undefined => {
+    if (cards.length < 2) return undefined;
+
+    // Sort by internal rank index for checks
+    const rankOrder = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+    const sorted = [...cards].sort((a, b) => rankOrder.indexOf(a.rank) - rankOrder.indexOf(b.rank));
+    
+    // Check for Multiples (Pair, Trips, Quads)
+    const rankCounts: Record<string, number> = {};
+    sorted.forEach(c => {
+        rankCounts[c.rank] = (rankCounts[c.rank] || 0) + 1;
+    });
+
+    const counts = Object.values(rankCounts);
+    const maxSame = Math.max(...counts);
+
+    if (maxSame === 4) return { name: "Four of a Kind", multiplier: 2.5, bonusPower: 0, cardsInvolved: 4 };
+    if (maxSame === 3) return { name: "Three of a Kind", multiplier: 2, bonusPower: 0, cardsInvolved: 3 };
+    if (maxSame === 2) {
+        // Check two pair?
+        const pairs = counts.filter(c => c === 2).length;
+        if (pairs === 2 && cards.length === 4) return { name: "Two Pair", multiplier: 1.75, bonusPower: 0, cardsInvolved: 4 };
+        return { name: "Pair", multiplier: 1.5, bonusPower: 0, cardsInvolved: 2 };
+    }
+
+    // Check Straight (min 3 cards)
+    if (cards.length >= 3) {
+        let isStraight = true;
+        for (let i = 0; i < sorted.length - 1; i++) {
+            const currentIdx = rankOrder.indexOf(sorted[i].rank);
+            const nextIdx = rankOrder.indexOf(sorted[i+1].rank);
+            if (nextIdx !== currentIdx + 1) {
+                isStraight = false;
+                break;
+            }
+        }
+        if (isStraight) {
+            // Flush?
+            const suits = new Set(cards.map(c => c.suit));
+            if (suits.size === 1) return { name: "Suited Straight", multiplier: 0, bonusPower: 10, cardsInvolved: cards.length };
+            return { name: "Straight", multiplier: 0, bonusPower: 5, cardsInvolved: cards.length };
+        }
+    }
+
+    // Check Flush (min 3 cards)
+    if (cards.length >= 3) {
+         const suits = new Set(cards.map(c => c.suit));
+         if (suits.size === 1) return { name: "Flush", multiplier: 1.25, bonusPower: 0, cardsInvolved: cards.length };
+    }
+
+    return undefined;
+};

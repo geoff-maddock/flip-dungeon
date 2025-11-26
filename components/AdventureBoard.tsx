@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { AdventureLocation, Card, NodeModifier, Reward, PlayerState } from '../types';
-import { Map, Castle, Trees, Mountain, Tent, Sword, ShieldAlert, EyeOff, Minimize, Info, Gift, Compass, Flag, PlusCircle, Split, Crown, Coins, Star, Zap, Sparkles, Leaf, Shield } from 'lucide-react';
+import { AdventureLocation, Card, NodeModifier, Reward, PlayerState, HandCombo } from '../types';
+import { Map, Castle, Trees, Mountain, Tent, Sword, ShieldAlert, EyeOff, Minimize, Info, Gift, Compass, Flag, PlusCircle, Split, Crown, Coins, Star, Zap, Sparkles, Leaf, Shield, Skull } from 'lucide-react';
 import { getSuitSymbol } from '../utils/deck';
 
 interface AdventureBoardProps {
   locations: AdventureLocation[];
   selectedCards: Card[];
   player: PlayerState;
+  combo?: HandCombo;
   onLocationAction: (locationId: string) => void;
   onExploreNewLand: () => void;
 }
@@ -70,11 +71,12 @@ const ModifierIcon = ({ mod }: { mod: NodeModifier }) => {
         case 'difficulty': return <ShieldAlert size={14} className="text-red-500" />;
         case 'suit_penalty': return <EyeOff size={14} className="text-purple-500" />;
         case 'max_cards': return <Minimize size={14} className="text-orange-500" />;
+        case 'elite_mechanic': return <Skull size={14} className="text-red-600 animate-pulse" />;
         default: return <Info size={14} className="text-zinc-500" />;
     }
 };
 
-const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCards, player, onLocationAction, onExploreNewLand }) => {
+const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCards, player, combo, onLocationAction, onExploreNewLand }) => {
   const [activeTab, setActiveTab] = useState(locations[0].id);
   const [hoveredReward, setHoveredReward] = useState<Reward | null>(null);
   
@@ -112,10 +114,20 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
   // Calculate Predicted Power
   const calculateAdventurePower = () => {
     if (selectedCards.length === 0) return 0;
+    
+    // Base Card
+    let cardTotal = selectedCards.reduce((acc, c) => acc + c.value, 0);
+
+    // Combo
+    if (combo) {
+        if (combo.multiplier > 0) cardTotal = Math.floor(cardTotal * combo.multiplier);
+        cardTotal += combo.bonusPower;
+    }
+
     const statKey = currentLocation.statAttribute;
     const statVal = player.stats[statKey] + (player.activeBuffs[statKey] || 0);
     const suitBonus = selectedCards.filter(c => c.suit === currentLocation.preferredSuit).length * 2;
-    const cardTotal = selectedCards.reduce((acc, c) => acc + c.value, 0);
+    
     return cardTotal + statVal + suitBonus;
   };
 
@@ -198,7 +210,7 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
                             <div className="flex items-start gap-3 text-sm bg-black/30 p-2 rounded-lg border border-white/5">
                                 <div className="mt-1"><ModifierIcon mod={activeModifier} /></div>
                                 <div>
-                                    <div className="font-bold text-red-300">{activeModifier.name}</div>
+                                    <div className={`font-bold ${activeModifier.type === 'elite_mechanic' ? 'text-red-500' : 'text-red-300'}`}>{activeModifier.name}</div>
                                     <div className="text-xs text-zinc-400 leading-tight">{activeModifier.description}</div>
                                 </div>
                             </div>
@@ -305,8 +317,13 @@ const AdventureBoard: React.FC<AdventureBoardProps> = ({ locations, selectedCard
                                 <span>EXPLORE {nextPathColor ? (nextPathColor === 'red' ? '(Red)' : '(Black)') : ''}</span>
                             </div>
                             {!isBlocked && predictedPower > 0 && (
-                                <div className="text-xs font-mono text-yellow-300 bg-black/30 px-2 py-0.5 rounded">
-                                    Power: {predictedPower}
+                                <div className="text-xs font-mono text-yellow-300 bg-black/30 px-2 py-0.5 rounded flex items-center gap-2">
+                                    <span>Power: {predictedPower}</span>
+                                    {combo && (
+                                        <span className="text-[9px] bg-purple-900 text-purple-200 px-1 rounded animate-pulse">
+                                            {combo.name}
+                                        </span>
+                                    )}
                                 </div>
                             )}
                         </>

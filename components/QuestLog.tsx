@@ -69,7 +69,7 @@ const QuestCard: React.FC<{ quest: Quest; player: PlayerState }> = ({ quest, pla
 const QuestLog: React.FC<QuestLogProps> = ({ player }) => {
   return (
     <div className="bg-zinc-950 p-4 rounded-lg border border-yellow-900/30 animate-in slide-in-from-top-2">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {player.quests.map(quest => (
                 <QuestCard key={quest.id} quest={quest} player={player} />
             ))}

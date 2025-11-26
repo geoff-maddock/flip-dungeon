@@ -1,16 +1,18 @@
 
 import React, { useState } from 'react';
-import { PlayerState, Card, StatAttribute, GameSettings } from '../types';
-import { Heart, Coins, Star, Sparkles, User, Shield, Zap, Scroll, Brain, Map as MapIcon, Crosshair, Gem, ArrowUpCircle, ShoppingBag, RefreshCw, Skull, Sun, Trash2, ScrollText, Book, Clock } from 'lucide-react';
+import { PlayerState, Card, StatAttribute, GameSettings, HandCombo } from '../types';
+import { Heart, Coins, Star, Sparkles, User, Shield, Zap, Scroll, Brain, Map as MapIcon, Crosshair, Gem, ArrowUpCircle, ShoppingBag, RefreshCw, Skull, Sun, Trash2, ScrollText, Book, Clock, Flame } from 'lucide-react';
 import { getSuitSymbol } from '../utils/deck';
 import { playSFX } from '../utils/sound';
+import { CLASS_DEFAULTS } from '../constants';
 import QuestLog from './QuestLog';
 
 interface PlayerDashboardProps {
   player: PlayerState;
   characterImage?: string;
   selectedCards: Card[];
-  onSelfAction: (actionType: 'rest' | 'train' | 'loot' | 'study' | 'dark_pact' | 'purify' | 'time_warp') => void;
+  combo?: HandCombo;
+  onSelfAction: (actionType: 'rest' | 'train' | 'loot' | 'study' | 'dark_pact' | 'purify' | 'time_warp' | 'ability') => void;
   onLevelUp: (stat: StatAttribute | 'PLAYER_LEVEL') => void;
   onBuyItem: (item: string, cost: number, statBuff?: StatAttribute, amount?: number) => void;
   onMulligan: () => void;
@@ -110,7 +112,8 @@ const ActionButton = ({
   manaCost,
   tooltip,
   variant = 'neutral',
-  predictedPower = 0
+  predictedPower = 0,
+  combo
 }: { 
   label: string; 
   subtext: string; 
@@ -122,6 +125,7 @@ const ActionButton = ({
   tooltip: string;
   variant?: 'neutral' | 'evil' | 'good';
   predictedPower?: number;
+  combo?: HandCombo;
 }) => (
   <button
     onClick={onClick}
@@ -154,7 +158,14 @@ const ActionButton = ({
     {!disabled && predictedPower > 0 && (
       <div className="mt-2 w-full bg-black/40 rounded px-2 py-1 flex justify-between items-center border border-white/5">
         <span className="text-[9px] uppercase text-zinc-500 font-bold">Power</span>
-        <span className="text-sm font-mono font-bold text-yellow-500">{predictedPower}</span>
+        <div className="flex items-center gap-2">
+            {combo && (
+                <span className="text-[9px] font-bold bg-purple-900/50 text-purple-300 px-1 rounded border border-purple-500/30 animate-pulse">
+                    {combo.name} {combo.multiplier > 0 ? `x${combo.multiplier}` : `+${combo.bonusPower}`}
+                </span>
+            )}
+            <span className="text-sm font-mono font-bold text-yellow-500">{predictedPower}</span>
+        </div>
       </div>
     )}
 
@@ -212,7 +223,7 @@ const SpellButton = ({
     </button>
 );
 
-const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImage, selectedCards, onSelfAction, onLevelUp, onBuyItem, onMulligan, onDiscardHand, settings }) => {
+const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImage, selectedCards, combo, onSelfAction, onLevelUp, onBuyItem, onMulligan, onDiscardHand, settings }) => {
   const [showShop, setShowShop] = useState(false);
   const [showQuests, setShowQuests] = useState(false);
   const [showSpellbook, setShowSpellbook] = useState(false);
@@ -233,10 +244,24 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
   // Time Warp Cost
   const timeWarpCost = player.extraTurnsBought + 1;
 
+  // Class Ability
+  const abilityDef = CLASS_DEFAULTS[player.class].ability;
+  const isAbilityReady = player.abilityCooldown === 0;
+  const canAffordAbility = player.resources.mana >= abilityDef.manaCost;
+
   // Helper to calculate total power for a self action to preview it
   const calculateSelfPower = (stat: StatAttribute, targetSuit: string) => {
     if (selectedCards.length === 0) return 0;
-    const cardTotal = selectedCards.reduce((acc, c) => acc + c.value, 0);
+    
+    // Base Card Total
+    let cardTotal = selectedCards.reduce((acc, c) => acc + c.value, 0);
+    
+    // Apply Combo Multiplier/Bonus
+    if (combo) {
+        if (combo.multiplier > 0) cardTotal = Math.floor(cardTotal * combo.multiplier);
+        cardTotal += combo.bonusPower;
+    }
+
     const statVal = player.stats[stat] + (player.activeBuffs[stat] || 0);
     const suitBonus = selectedCards.filter(c => c.suit === targetSuit).length * 2;
     return cardTotal + statVal + suitBonus;
@@ -276,6 +301,43 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
                 </button>
             </div>
           </div>
+      </div>
+
+      {/* Heroic Ability Button */}
+      <div className="w-full">
+        <button
+            onClick={() => onSelfAction('ability')}
+            disabled={!isAbilityReady || !canAffordAbility}
+            className={`
+                w-full flex items-center justify-between p-3 rounded-lg border transition-all relative overflow-hidden group
+                ${isAbilityReady && canAffordAbility
+                    ? 'bg-gradient-to-r from-orange-900/60 to-red-900/60 border-orange-500/50 hover:border-orange-400 hover:shadow-[0_0_20px_rgba(249,115,22,0.3)] text-orange-100'
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed grayscale'
+                }
+            `}
+        >
+            <div className="flex items-center gap-3 relative z-10">
+                <div className={`p-2 rounded-full border ${isAbilityReady ? 'bg-black/30 border-orange-400' : 'bg-zinc-800 border-zinc-700'}`}>
+                    <Flame size={18} className={isAbilityReady ? 'text-orange-400 animate-pulse' : 'text-zinc-600'} />
+                </div>
+                <div className="text-left">
+                    <div className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                        {abilityDef.name}
+                        {abilityDef.manaCost > 0 && <span className="text-[10px] bg-blue-900/50 text-blue-300 px-1.5 rounded border border-blue-500/30">{abilityDef.manaCost} Mana</span>}
+                    </div>
+                    <div className="text-[10px] opacity-80">{abilityDef.description}</div>
+                </div>
+            </div>
+
+            {!isAbilityReady ? (
+                <div className="flex flex-col items-center justify-center bg-black/40 rounded px-3 py-1 border border-zinc-700">
+                    <span className="text-xl font-black text-zinc-500">{player.abilityCooldown}</span>
+                    <span className="text-[8px] uppercase text-zinc-600">Turns</span>
+                </div>
+            ) : (
+                <div className="text-[10px] font-bold text-orange-400 uppercase tracking-widest animate-pulse">Ready</div>
+            )}
+        </button>
       </div>
 
       {/* 2. Stats & Alignment */}
@@ -503,6 +565,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
                   manaCost={manaCost}
                   predictedPower={calculateSelfPower('spirit', 'hearts')}
                   tooltip={`Rest: Heal HP based on Spirit + Cards.`}
+                  combo={combo}
                />
                <ActionButton 
                   label="TRAIN" 
@@ -514,6 +577,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
                   manaCost={manaCost}
                   predictedPower={calculateSelfPower('might', 'clubs')}
                   tooltip={`Train: Gain XP based on Might + Cards.`}
+                  combo={combo}
                />
                <ActionButton 
                   label="LOOT" 
@@ -525,6 +589,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
                   manaCost={manaCost}
                   predictedPower={calculateSelfPower('agility', 'spades')}
                   tooltip={`Loot: Find Gold based on Agility + Cards.`}
+                  combo={combo}
                />
                <ActionButton 
                   label="STUDY" 
@@ -536,6 +601,7 @@ const PlayerDashboard: React.FC<PlayerDashboardProps> = ({ player, characterImag
                   manaCost={manaCost}
                   predictedPower={calculateSelfPower('wisdom', 'diamonds')}
                   tooltip={`Study: Gain Mana based on Wisdom + Cards.`}
+                  combo={combo}
                />
             </div>
       </div>
