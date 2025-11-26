@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -44,6 +44,11 @@
         50% { transform: translateY(-5px); }
         100% { transform: translateY(0px); }
       }
+
+      @keyframes float-up-fade {
+        0% { opacity: 1; transform: translateY(0); }
+        100% { opacity: 0; transform: translateY(-50px); }
+      }
     </style>
   <script type="importmap">
 {
@@ -57,7 +62,7 @@
 }
 </script>
 </head>
-  <body class="bg-zinc-950 text-zinc-100 overflow-hidden bg-texture">
+  <body class="bg-zinc-950 text-zinc-100 overflow-hidden bg-texture h-full">
     <div class="fixed inset-0 pointer-events-none bg-grid-pattern z-0"></div>
     <div id="root" class="relative z-10 h-full"></div>
   </body>

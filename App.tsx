@@ -14,7 +14,8 @@ import AdventureBoard from './components/AdventureBoard';
 import Scoreboard from './components/Scoreboard';
 import GameRules from './components/GameRules';
 import AdminPanel from './components/AdminPanel';
-import { Skull, Trophy, RefreshCcw, Save, TrendingUp, HelpCircle, Settings, Wand2, Loader2, Copy, X, Mic2, Volume2 } from 'lucide-react';
+import FloatingTextLayer, { FloatingText } from './components/FloatingTextLayer';
+import { Skull, Trophy, RefreshCcw, Save, TrendingUp, HelpCircle, Settings, Wand2, Loader2, Copy, X, Volume2, Play } from 'lucide-react';
 
 const App: React.FC = () => {
   // Settings State
@@ -54,6 +55,7 @@ const App: React.FC = () => {
 
   // Visual Effects State
   const [damageOverlay, setDamageOverlay] = useState(false);
+  const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
 
   // Game State
   const [locations, setLocations] = useState<AdventureLocation[]>(ADVENTURE_LOCATIONS);
@@ -130,6 +132,20 @@ const App: React.FC = () => {
             resources: { ...prev.resources, health: newSettings.initialHealth, maxHealth: newSettings.initialHealth }
         }));
     }
+  };
+
+  const triggerFloatingText = (text: string, type: 'damage' | 'heal' | 'gold' | 'xp' | 'mana' | 'info') => {
+      const newText: FloatingText = {
+          id: Date.now().toString() + Math.random(),
+          text,
+          type,
+          x: Math.random() * 20 + 40, // Center-ish
+          y: 40
+      };
+      setFloatingTexts(prev => [...prev, newText]);
+      setTimeout(() => {
+          setFloatingTexts(prev => prev.filter(t => t.id !== newText.id));
+      }, 1500);
   };
 
   // --- Game Logic ---
@@ -304,6 +320,7 @@ const App: React.FC = () => {
              newScoring.soul += 1;
              message = `Restored ${totalHeal} Health!`;
              detailsLog = `+${totalHeal} HP`;
+             triggerFloatingText(`+${totalHeal} HP`, 'heal');
              if (extraAmount > 0) extraMsg = ` (+${extraAmount} Critical)`;
         }
         else if (actionType === 'train') {
@@ -313,6 +330,7 @@ const App: React.FC = () => {
              newScoring.champion += 1;
              message = `Gained ${totalXP} XP!`;
              detailsLog = `+${totalXP} XP`;
+             triggerFloatingText(`+${totalXP} XP`, 'xp');
              if (extraAmount > 0) extraMsg = ` (+${extraAmount} Critical)`;
         }
         else if (actionType === 'loot') {
@@ -322,6 +340,7 @@ const App: React.FC = () => {
              newScoring.fortune += 1;
              message = `Found ${totalGold} Gold!`;
              detailsLog = `+${totalGold} Gold`;
+             triggerFloatingText(`+${totalGold} Gold`, 'gold');
              if (extraAmount > 0) extraMsg = ` (+${extraAmount} Critical)`;
         }
         else if (actionType === 'study') {
@@ -331,6 +350,7 @@ const App: React.FC = () => {
              newScoring.soul += 1;
              message = `Gained ${totalMana} Mana!`;
              detailsLog = `+${totalMana} Mana`;
+             triggerFloatingText(`+${totalMana} Mana`, 'mana');
              if (extraAmount > 0) extraMsg = ` (+${extraAmount} Critical)`;
         }
         else if (actionType.startsWith('explore:')) {
@@ -343,10 +363,12 @@ const App: React.FC = () => {
                  newResources.xp += 1;
                  message += " Found +1 XP & Double Move!";
                  detailsLog += ", +1 XP, +2 Nodes";
+                 triggerFloatingText("+1 XP & Double Move", 'xp');
              } else if (margin >= 5) {
                  newResources.gold += 1;
                  message += " Found +1 Gold!";
                  detailsLog += ", +1 Gold";
+                 triggerFloatingText("+1 Gold", 'gold');
              } else {
                  detailsLog += ", +1 Node";
              }
@@ -366,6 +388,7 @@ const App: React.FC = () => {
         damageTaken += damage;
         message = `FAILED! Took ${damage} Damage.`;
         detailsLog = `Took ${damage} Dmg`;
+        triggerFloatingText(`-${damage} HP`, 'damage');
         
         // Trigger Damage Vignette
         setDamageOverlay(true);
@@ -429,19 +452,24 @@ const App: React.FC = () => {
                 if (reward.type === 'gold') {
                     r.gold += reward.value;
                     rewardMsg = `+${reward.value} Gold`;
+                    triggerFloatingText(rewardMsg, 'gold');
                 } else if (reward.type === 'xp') {
                     r.xp += reward.value;
                     rewardMsg = `+${reward.value} XP`;
+                    triggerFloatingText(rewardMsg, 'xp');
                 } else if (reward.type === 'mana') {
                     r.mana += reward.value;
                     rewardMsg = `+${reward.value} Mana`;
+                    triggerFloatingText(rewardMsg, 'mana');
                 } else if (reward.type === 'item') {
                     const itemName = reward.target || 'Treasure';
                     i.push(itemName);
                     rewardMsg = `Obtained ${itemName}`;
+                    triggerFloatingText(rewardMsg, 'info');
                 } else if (reward.type === 'stat_permanent' && reward.target) {
                     s[reward.target as StatAttribute] = (s[reward.target as StatAttribute] || 0) + reward.value;
                     rewardMsg = `+${reward.value} ${reward.target}`;
+                    triggerFloatingText(rewardMsg, 'info');
                 }
 
                 message += ` LOCATION CLEARED! Reward: ${rewardMsg}`;
@@ -487,6 +515,7 @@ const App: React.FC = () => {
                  resources: { ...prev.resources, mana: prev.resources.mana + 5 },
                  alignment: Math.max(settings.alignmentMin, prev.alignment - 3)
              }));
+             triggerFloatingText("Dark Pact: +5 Mana", 'mana');
              return; 
         }
         if (target === 'purify') {
@@ -501,6 +530,7 @@ const App: React.FC = () => {
                  },
                  alignment: Math.min(settings.alignmentMax, prev.alignment + 2)
              }));
+             triggerFloatingText("Purify: +3 HP", 'heal');
              return;
         }
         if (target === 'time_warp') {
@@ -514,6 +544,7 @@ const App: React.FC = () => {
              }));
              // Decrementing turn effectively adds a turn to the current round
              setTurn(t => Math.max(0, t - 1));
+             triggerFloatingText("Time Warp! Extra Action", 'info');
              return;
         }
     }
@@ -618,6 +649,7 @@ const App: React.FC = () => {
                       health: prev.resources.maxHealth + 2
                   }
               }));
+              triggerFloatingText("Level Up! +Max HP", 'heal');
           }
       } else {
         const currentVal = player.stats[stat as StatAttribute];
@@ -629,6 +661,7 @@ const App: React.FC = () => {
                 stats: { ...prev.stats, [stat]: currentVal + 1 },
                 resources: { ...prev.resources, xp: prev.resources.xp - cost }
             }));
+            triggerFloatingText(`${stat.toUpperCase()} UP!`, 'info');
         }
       }
   };
@@ -646,6 +679,7 @@ const App: React.FC = () => {
               activeBuffs: statBuff ? { ...prev.activeBuffs, [statBuff]: (prev.activeBuffs[statBuff] || 0) + 2 } : prev.activeBuffs,
               items: [...prev.items, name]
           }));
+          triggerFloatingText(`Bought ${name}`, 'gold');
       }
   };
 
@@ -666,6 +700,7 @@ const App: React.FC = () => {
           resources: { ...prev.resources, mana: prev.resources.mana - 1 }
       }));
       setSelectedCardIds([]);
+      triggerFloatingText("Transmuted", 'mana');
   };
 
   const handleDiscardHand = () => {
@@ -679,6 +714,7 @@ const App: React.FC = () => {
     const newHand = drawCards(settings.handSize);
     setHand(newHand);
     setSelectedCardIds([]);
+    triggerFloatingText("Hand Refreshed", 'mana');
   };
 
   const handleRewindFate = () => {
@@ -739,9 +775,11 @@ const App: React.FC = () => {
            playSFX('damage');
            setDamageOverlay(true);
            setTimeout(() => setDamageOverlay(false), 500);
+           triggerFloatingText(`Still Failed! -${newDamage} HP`, 'damage');
       } else {
           message += " (Damage prevented)";
           playSFX('heal');
+          triggerFloatingText("Fate Changed!", 'heal');
       }
 
       const newRecord: TurnRecord = {
@@ -772,6 +810,7 @@ const App: React.FC = () => {
       }));
       const newLocation = generateRandomLocation(round);
       setLocations(prev => [...prev, newLocation]);
+      triggerFloatingText("New Land Discovered", 'xp');
   };
 
   const handleGenerateArt = async (e: React.MouseEvent, className: string, description: string) => {
@@ -833,6 +872,7 @@ const App: React.FC = () => {
             ...prev,
             resources: { ...prev.resources, health: Math.max(0, prev.resources.health - 1) }
         }));
+        triggerFloatingText("Evil rots you... -1 HP", 'damage');
     }
 
     if (turn >= settings.turnsPerRound) {
@@ -842,6 +882,7 @@ const App: React.FC = () => {
         setRound(r => r + 1);
         setTurn(1);
         setPlayer(prev => ({ ...prev, activeBuffs: {} }));
+        triggerFloatingText("New Round Started", 'info');
       }
     } else {
       setTurn(t => t + 1);
@@ -967,7 +1008,7 @@ const App: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 overflow-visible content-start">
+            <div className="grid grid-cols-2 gap-4 overflow-visible content-start h-[600px] overflow-y-auto scrollbar-thin pr-2">
                 {Object.entries(CLASS_DEFAULTS).map(([className, details]) => {
                     const isGenerating = generatingImages.includes(className);
                     const imageSrc = customClassImages[className] || details.image;
@@ -976,7 +1017,7 @@ const App: React.FC = () => {
                         <button
                             key={className}
                             onClick={() => startGame(className as CharacterClass)}
-                            className="group relative h-32 w-full rounded-2xl overflow-hidden border border-zinc-800 transition-all hover:scale-[1.02] hover:border-zinc-500 hover:shadow-2xl text-left"
+                            className="group relative h-32 w-full rounded-2xl overflow-hidden border border-zinc-800 transition-all hover:scale-[1.02] hover:border-zinc-500 hover:shadow-2xl text-left flex-shrink-0"
                         >
                             <div className="absolute inset-0">
                                 <img src={imageSrc} alt={className} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
@@ -1095,24 +1136,41 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-6 max-w-7xl mx-auto flex flex-col gap-6 relative">
+    <div className="fixed inset-0 flex flex-col bg-zinc-950 bg-texture text-zinc-100 font-sans h-full overflow-hidden">
+      <FloatingTextLayer texts={floatingTexts} />
+
       {/* Damage Overlay */}
       {damageOverlay && (
          <div className="fixed inset-0 z-[100] pointer-events-none bg-red-600/20 mix-blend-overlay animate-pulse ring-[20px] ring-inset ring-red-600/30"></div>
       )}
 
-      <header className="flex justify-between items-center bg-black/20 p-4 rounded-xl backdrop-blur-sm border border-white/5">
+      {/* Header */}
+      <header className="flex-shrink-0 flex justify-between items-center bg-zinc-950/90 p-3 md:px-6 border-b border-zinc-800/50 z-50">
          <div className="flex items-center gap-4">
-             <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center font-black text-zinc-500 border border-zinc-700">
+             <div className="w-8 h-8 bg-zinc-800 rounded flex items-center justify-center font-black text-zinc-500 border border-zinc-700">
                  FD
              </div>
              <div>
-                 <h1 className="font-bold text-zinc-200 leading-none">Flip Dungeon</h1>
-                 <div className="flex gap-2 text-xs text-zinc-500 font-mono items-center mt-1">
-                    <span>Round {round}/{settings.maxRounds}</span>
-                    <span>•</span>
-                    <span>Turn {turn}/{settings.turnsPerRound}</span>
-                    <span>•</span>
+                 <h1 className="font-bold text-zinc-200 leading-none text-sm md:text-base">Flip Dungeon</h1>
+                 <div className="flex gap-4 text-[10px] text-zinc-500 font-mono items-center mt-0.5">
+                    <div className="flex items-center gap-1">
+                        <span>Round {round}/{settings.maxRounds}</span>
+                    </div>
+                    
+                    {/* Visual Turn Tracker Pips */}
+                    <div className="flex gap-1">
+                        {Array.from({ length: settings.turnsPerRound }).map((_, i) => (
+                            <div 
+                                key={i} 
+                                className={`w-1.5 h-1.5 rounded-full transition-all ${
+                                    i + 1 < turn ? 'bg-zinc-700' : 
+                                    i + 1 === turn ? 'bg-yellow-500 animate-pulse scale-125' : 
+                                    'bg-zinc-800 border border-zinc-700'
+                                }`} 
+                            />
+                        ))}
+                    </div>
+                    
                     <span className={`${difficulty === 'Hard' ? 'text-red-500' : difficulty === 'Easy' ? 'text-green-500' : 'text-zinc-500'}`}>{difficulty}</span>
                  </div>
              </div>
@@ -1120,112 +1178,136 @@ const App: React.FC = () => {
          <div className="flex gap-2">
             <button 
                 onClick={() => setShowRules(true)}
-                className="text-zinc-500 hover:text-white transition-colors p-2"
+                className="text-zinc-500 hover:text-white transition-colors p-1"
                 title="Game Rules"
             >
-                <HelpCircle size={24} />
+                <HelpCircle size={20} />
             </button>
             <button 
                 onClick={() => setShowAdmin(true)}
-                className="text-zinc-600 hover:text-zinc-300 transition-colors p-2"
+                className="text-zinc-600 hover:text-zinc-300 transition-colors p-1"
                 title="Settings"
             >
-                <Settings size={24} />
+                <Settings size={20} />
             </button>
          </div>
       </header>
 
-      <PlayerDashboard 
-        player={player} 
-        characterImage={customClassImages[player.class] || CLASS_DEFAULTS[player.class].image}
-        selectedCards={hand.filter(c => selectedCardIds.includes(c.id))}
-        onSelfAction={(type) => handleAction('self', type)}
-        onLevelUp={handleLevelUp}
-        onBuyItem={handleBuyItem}
-        onMulligan={handleMulligan}
-        onDiscardHand={handleDiscardHand}
-        settings={settings}
-      />
-
-      <AdventureBoard 
-        locations={locations} 
-        selectedCards={hand.filter(c => selectedCardIds.includes(c.id))}
-        player={player}
-        onLocationAction={(locId) => handleAction('location', locId)}
-        onExploreNewLand={handleExploreNewLand}
-      />
-
-      <div className="flex-1 flex flex-col md:flex-row items-end justify-between pb-8 min-h-[240px] gap-8">
+      {/* Main Content Area: Sidebar + Map */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
           
-          {/* Player Discard Pile Visual */}
-          <div className="relative hidden md:block group cursor-pointer" onClick={() => playerDiscard.length > 0 && setViewingDiscard('player')}>
-              <div className="w-28 h-44 border-2 border-dashed border-zinc-800 rounded-xl flex items-center justify-center bg-black/20 text-zinc-700 font-bold uppercase text-xs tracking-widest">
-                  Discard
+          {/* Sidebar (Desktop) / Top Section (Mobile) */}
+          <aside className="w-full lg:w-96 xl:w-[450px] flex-shrink-0 bg-zinc-900/95 border-b lg:border-b-0 lg:border-r border-zinc-800/50 overflow-y-auto scrollbar-thin z-20">
+              <div className="p-4 lg:p-6 pb-24 lg:pb-6">
+                <PlayerDashboard 
+                    player={player} 
+                    characterImage={customClassImages[player.class] || CLASS_DEFAULTS[player.class].image}
+                    selectedCards={hand.filter(c => selectedCardIds.includes(c.id))}
+                    onSelfAction={(type) => handleAction('self', type)}
+                    onLevelUp={handleLevelUp}
+                    onBuyItem={handleBuyItem}
+                    onMulligan={handleMulligan}
+                    onDiscardHand={handleDiscardHand}
+                    settings={settings}
+                />
               </div>
-              {playerDiscard.length > 0 && (
-                  <>
-                    <div className="absolute inset-0 transform rotate-6 translate-x-1">
-                        <PlayingCard card={playerDiscard[playerDiscard.length - 1]} />
-                    </div>
-                    <div className="absolute -top-2 -right-2 bg-zinc-800 text-zinc-300 text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border border-zinc-600 z-10">
-                        {playerDiscard.length}
-                    </div>
-                  </>
-              )}
-          </div>
+          </aside>
 
-          {/* Fanned Hand Layout */}
-          <div className="relative h-56 w-full max-w-2xl mx-auto flex justify-center items-end pb-4">
-              {hand.map((card, index) => {
-                  const selectedIndex = selectedCardIds.indexOf(card.id);
-                  const isSelected = selectedIndex >= 0;
-                  
-                  // Calculate fanning
-                  const totalCards = hand.length;
-                  const centerIndex = (totalCards - 1) / 2;
-                  const offset = index - centerIndex;
-                  const rotation = offset * 5; // Degrees per card
-                  const yOffset = Math.abs(offset) * 5; // Arc effect
-
-                  return (
-                    <div 
-                        key={card.id} 
-                        className="absolute transform transition-all duration-300 origin-bottom"
-                        style={{
-                            left: `calc(50% + ${offset * 40}px - 50px)`, // 50px is approx half card width
-                            bottom: `${isSelected ? 40 : 0}px`,
-                            zIndex: isSelected ? 50 : index + 10,
-                            transform: `rotate(${rotation}deg) translateY(${yOffset}px)`
-                        }}
-                    >
-                        <PlayingCard 
-                            card={card} 
-                            selected={isSelected}
-                            selectionIndex={isSelected ? selectedIndex : undefined}
-                            onClick={() => toggleCardSelection(card.id)}
-                        />
-                    </div>
-                  );
-              })}
-          </div>
-          
-           {/* Dungeon Discard Pile Visual */}
-           <div className="relative hidden md:block group cursor-pointer" onClick={() => dungeonDiscard.length > 0 && setViewingDiscard('dungeon')}>
-              <div className="w-28 h-44 border-2 border-dashed border-red-900/30 rounded-xl flex items-center justify-center bg-black/20 text-red-900/50 font-bold uppercase text-xs tracking-widest text-center">
-                  Dungeon<br/>Discard
+          {/* Main Stage (Adventure) */}
+          <main className="flex-1 relative flex flex-col overflow-hidden bg-black/20">
+              <div className="flex-1 overflow-y-auto scrollbar-thin">
+                <AdventureBoard 
+                    locations={locations} 
+                    selectedCards={hand.filter(c => selectedCardIds.includes(c.id))}
+                    player={player}
+                    onLocationAction={(locId) => handleAction('location', locId)}
+                    onExploreNewLand={handleExploreNewLand}
+                />
               </div>
-              {dungeonDiscard.length > 0 && (
-                  <>
-                    <div className="absolute inset-0 transform -rotate-3 -translate-x-1">
-                        <PlayingCard card={dungeonDiscard[dungeonDiscard.length - 1]} />
-                    </div>
-                    <div className="absolute -top-2 -right-2 bg-red-900 text-red-200 text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border border-red-700 z-10">
-                        {dungeonDiscard.length}
-                    </div>
-                  </>
-              )}
-          </div>
+          </main>
+      </div>
 
+      {/* Sticky Footer Overlay: Hand */}
+      <div className="absolute bottom-0 left-0 right-0 z-40 pointer-events-none flex justify-center">
+          <div className="w-full max-w-7xl px-4 md:px-6 pb-4 pt-12 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex items-end justify-between gap-4 pointer-events-auto">
+            
+            {/* Player Discard Pile */}
+            <div className="relative hidden md:block group cursor-pointer flex-shrink-0" onClick={() => playerDiscard.length > 0 && setViewingDiscard('player')}>
+                <div className="w-24 h-36 border-2 border-dashed border-zinc-800 rounded-xl flex items-center justify-center bg-black/40 text-zinc-700 font-bold uppercase text-[10px] tracking-widest hover:border-zinc-600 transition-colors">
+                    Discard
+                </div>
+                {playerDiscard.length > 0 && (
+                    <>
+                        <div className="absolute inset-0 transform rotate-6 translate-x-1 scale-90 origin-bottom-left">
+                            <PlayingCard card={playerDiscard[playerDiscard.length - 1]} />
+                        </div>
+                        <div className="absolute -top-2 -right-2 bg-zinc-800 text-zinc-300 text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border border-zinc-600 z-10 shadow-lg">
+                            {playerDiscard.length}
+                        </div>
+                    </>
+                )}
+            </div>
+
+            {/* Fanned Hand */}
+            <div className="relative h-40 w-full max-w-lg mx-auto flex justify-center items-end pb-2">
+                {selectedCardIds.length > 0 && (
+                     <button 
+                        onClick={() => setSelectedCardIds([])}
+                        className="absolute -top-14 right-0 bg-zinc-800 text-zinc-400 hover:text-white p-2 rounded-full border border-zinc-700 shadow-lg z-50 transition-colors"
+                        title="Clear Selection"
+                     >
+                         <X size={16} />
+                     </button>
+                )}
+                {hand.map((card, index) => {
+                    const selectedIndex = selectedCardIds.indexOf(card.id);
+                    const isSelected = selectedIndex >= 0;
+                    
+                    const totalCards = hand.length;
+                    const centerIndex = (totalCards - 1) / 2;
+                    const offset = index - centerIndex;
+                    const rotation = offset * 4; 
+                    const yOffset = Math.abs(offset) * 6;
+
+                    return (
+                        <div 
+                            key={card.id} 
+                            className="absolute transform transition-all duration-300 origin-bottom hover:z-[60]"
+                            style={{
+                                left: `calc(50% + ${offset * 30}px - 50px)`, // Tighter spacing
+                                bottom: `${isSelected ? 30 : 0}px`,
+                                zIndex: isSelected ? 50 : index + 10,
+                                transform: `rotate(${rotation}deg) translateY(${yOffset}px)`
+                            }}
+                        >
+                            <PlayingCard 
+                                card={card} 
+                                selected={isSelected}
+                                selectionIndex={isSelected ? selectedIndex : undefined}
+                                onClick={() => toggleCardSelection(card.id)}
+                            />
+                        </div>
+                    );
+                })}
+            </div>
+            
+            {/* Dungeon Discard Pile */}
+            <div className="relative hidden md:block group cursor-pointer flex-shrink-0" onClick={() => dungeonDiscard.length > 0 && setViewingDiscard('dungeon')}>
+                <div className="w-24 h-36 border-2 border-dashed border-red-900/30 rounded-xl flex items-center justify-center bg-black/40 text-red-900/50 font-bold uppercase text-[10px] tracking-widest text-center hover:border-red-900/50 transition-colors">
+                    Dungeon<br/>Discard
+                </div>
+                {dungeonDiscard.length > 0 && (
+                    <>
+                        <div className="absolute inset-0 transform -rotate-3 -translate-x-1 scale-90 origin-bottom-right">
+                            <PlayingCard card={dungeonDiscard[dungeonDiscard.length - 1]} />
+                        </div>
+                        <div className="absolute -top-2 -right-2 bg-red-900 text-red-200 text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border border-red-700 z-10 shadow-lg">
+                            {dungeonDiscard.length}
+                        </div>
+                    </>
+                )}
+            </div>
+          </div>
       </div>
       
       {/* Viewing Discard Modal */}
@@ -1251,7 +1333,7 @@ const App: React.FC = () => {
 
       {/* Resolution Overlay */}
       {phase === 'resolving' && turnResult && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
               <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-2xl w-full p-8 shadow-2xl relative overflow-hidden">
                   <div className={`absolute top-0 left-0 right-0 h-2 ${turnResult.success ? 'bg-green-500' : 'bg-red-500'}`} />
                   
